@@ -1,0 +1,1 @@
+"""Applicability checks for rules."""
