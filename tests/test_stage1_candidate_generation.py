@@ -48,6 +48,11 @@ def test_stage1_happy_path_saves_file(tmp_path: Path) -> None:
 
     assert result["candidate_pool_size"] == 3
     assert (tmp_path / "q_001.json").exists()
+    csv_path = tmp_path / "q_001.csv"
+    assert csv_path.exists()
+    csv_text = csv_path.read_text(encoding="utf-8")
+    assert "candidate_pool_size" in csv_text
+    assert "\"EMPTY\"" in csv_text
 
 
 def test_stage1_rejects_unknown_rule(tmp_path: Path) -> None:

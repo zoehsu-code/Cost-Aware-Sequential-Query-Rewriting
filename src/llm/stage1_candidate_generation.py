@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -134,10 +135,43 @@ class Stage1CandidateGenerator:
         return output
 
     def save_output(self, output: dict[str, Any]) -> Path:
-        """Save one JSON file per query for Stage 2 consumption."""
+        """Save one JSON file per query for Stage 2 consumption (and optional CSV sidecar)."""
 
         output_dir = self.config.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / f"{output['query_id']}.json"
         path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+        if self.config.save_csv:
+            self.save_output_csv(output)
+        return path
+
+    def save_output_csv(self, output: dict[str, Any]) -> Path:
+        """Save one CSV sidecar per query for human inspection."""
+
+        output_dir = self.config.output_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / f"{output['query_id']}.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "query_id",
+                    "original_sql",
+                    "candidate_pool_size",
+                    "candidate_rules",
+                    "llm_recommended_order",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "query_id": output["query_id"],
+                    "original_sql": output["original_sql"],
+                    "candidate_pool_size": output["candidate_pool_size"],
+                    "candidate_rules": json.dumps(output["candidate_rules"], ensure_ascii=False),
+                    "llm_recommended_order": json.dumps(
+                        output["llm_recommended_order"], ensure_ascii=False
+                    ),
+                }
+            )
         return path

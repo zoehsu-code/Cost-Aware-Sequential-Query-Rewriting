@@ -15,6 +15,7 @@ class Stage1Config:
     llm_model: str = "gpt-4.1-mini"
     prompt_version: str = "v1"
     output_dir: Path = Path("outputs/stage1")
+    save_csv: bool = True
 
     def __post_init__(self) -> None:
         if self.max_rules <= 0:
