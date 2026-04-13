@@ -48,22 +48,64 @@
   - `evaluation/` — Metrics and method comparison.
   - `utils/` — Config and logging utilities.
 
-## 5) How to Run
-- Example command:
+## 5) Environment Setup
+
+Choose one method:
+
+### Option A: Conda (recommended)
+
+```bash
+conda env create -f environment.yml
+conda activate query-rewrite
+```
+
+Conda env includes Python tooling (`pytest`) and Java tooling (`openjdk`, `maven`) for
+`rule_library/java/RuleMappingSelfCheck.java`.
+
+### Option B: pip
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install -r requirements.txt
+```
+
+If you need to run the Java rule-mapping self-check, install JDK + Maven separately when
+using the pip route.
+
+## 6) How to Run
+
+`lookahead.yaml` here is an **experiment strategy config** (scheduler choice), not an environment file.
+It is only an example run command:
 
 ```bash
 python -m src.main --config configs/lookahead.yaml
 ```
 
-## 6) Methods
+## 7) Stage 1 Outputs
+
+Stage 1 candidate generation writes one file pair per query under `outputs/stage1/`:
+
+- `<query_id>.json`: strict machine-readable payload for Stage 2.
+- `<query_id>.csv`: one-row sidecar for quick manual inspection.
+
+The CSV includes columns:
+
+- `query_id`
+- `original_sql`
+- `candidate_pool_size`
+- `candidate_rules` (JSON array string)
+- `llm_recommended_order` (JSON array string)
+
+## 8) Methods
 - **Greedy:** Selects the immediate best candidate by current estimated gain.
 - **Bandit:** Balances exploration/exploitation across rewrite rules.
 - **Lookahead (main method):** Estimates multi-step benefit before choosing the next rule.
 
-## 7) Baselines
+## 9) Baselines
 - **Fixed order:** Apply rewrite rules in a predefined static sequence.
 - **LLM-based (optional):** Use an LLM to propose rewrites or rule sequences.
 
-## 8) Future Work
+## 10) Future Work
 - **RL-based schedulers:** Learn adaptive policies from long-horizon rewards.
 - **Deeper LLM integration:** Use LLMs for candidate proposal, pruning, or policy guidance.
