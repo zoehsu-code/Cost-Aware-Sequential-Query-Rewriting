@@ -77,8 +77,8 @@ Required columns:
 
 ```csv
 query_id,original_sql
-q_001,SELECT * FROM t WHERE a > 1
-q_002,SELECT c FROM t2 WHERE c IS NOT NULL
+1,SELECT * FROM t WHERE a > 1
+2,SELECT c FROM t2 WHERE c IS NOT NULL
 ```
 
 ---

@@ -15,5 +15,5 @@ Example row format:
 
 ```csv
 query_id,original_sql
-q_001,SELECT * FROM t WHERE a > 1
+1,SELECT * FROM t WHERE a > 1
 ```

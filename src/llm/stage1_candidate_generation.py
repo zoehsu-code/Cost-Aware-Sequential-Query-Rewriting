@@ -90,8 +90,10 @@ class Stage1CandidateGenerator:
         if set(output.keys()) != required_keys:
             raise ValueError("Output JSON keys do not match required structure")
 
-        if output["query_id"] != stage_input.query_id:
+        output_query_id = str(output["query_id"])
+        if output_query_id != stage_input.query_id:
             raise ValueError("query_id must be preserved exactly")
+        output["query_id"] = stage_input.query_id
         if output["original_sql"] != stage_input.original_sql:
             raise ValueError("original_sql must be preserved exactly")
 
