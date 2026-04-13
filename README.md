@@ -1,68 +1,41 @@
 # Sequential Rule Scheduling for Query Rewrite
 
-## 1) Project Overview
-- **Problem:** Query rewrite optimization aims to improve SQL execution cost by transforming a query into a semantically equivalent but faster form.
-- **Limitation of existing methods:**
-  - **Fixed-rule pipelines** use static rewrite orders and cannot adapt to query-specific behavior.
-  - **LLM one-shot rewriting** can be brittle, hard to control, and inconsistent in cost reduction.
-- **Our idea:** Model rewriting as a **sequential decision process** where each step chooses the next best rule based on the current rewrite state and observed cost feedback.
+## 1) Project overview / structure
 
-## 2) Key Idea
-- **Two-stage pipeline:**
-  - **Stage 1 — Candidate Generation:** Enumerate applicable rewrite actions from the current query state.
-  - **Stage 2 — Rule Scheduling:** Select which candidate to apply next using a scheduling strategy.
-- **Scheduling strategies:**
-  - **Greedy**
-  - **Bandit**
-  - **Lookahead** (primary method)
+This repository is for query rewrite research with a two-stage workflow:
 
-## 3) Pipeline
-- Core loop:
-  - `state → candidates → scheduler → apply → cost → update`
-- Intuition:
-  - Start from current query state.
-  - Generate valid rewrite candidates.
-  - Scheduler picks the next rule.
-  - Apply rule to get a new query.
-  - Evaluate execution cost.
-  - Update state/history and repeat until stop criteria.
+- **Stage 1**: LLM selects a query-specific candidate rule pool from Calcite rules.
+- **Stage 2**: scheduler/executor applies rules sequentially (research modules exist, full pipeline wiring is still evolving).
 
-## 4) Repository Structure
-- `configs/` — Experiment and method configuration files.
-- `data/` — Input datasets, query workloads, and metadata.
-- `logs/` — Runtime logs and traces.
-- `outputs/` — Final rewrite results and analysis artifacts.
-- `scripts/` — Helper scripts for setup and experiments.
-- `notebooks/` — Exploratory analysis and visualization notebooks.
-- `docs/` — Project documentation and notes.
-- `tests/` — Unit/integration tests.
-- `src/` — Core implementation.
-  - `pipeline/` — Rewrite loop and orchestration.
-  - `env/` — State, transitions, and environment dynamics.
-  - `schedulers/` — Greedy, Bandit, and Lookahead policies.
-  - `rules/` — Rule library, applicability checks, execution.
-  - `plans/` — Plan parsing and feature extraction.
-  - `db/` — DB connectors and cost interfaces.
-  - `llm/` — Optional LLM-assisted components.
-  - `baselines/` — Baseline methods (fixed order, optional LLM).
-  - `evaluation/` — Metrics and method comparison.
-  - `utils/` — Config and logging utilities.
+Current key folders:
 
-## 5) Environment Setup
+- `src/llm/` — Stage 1 candidate generation (`stage1_candidate_generation.py`).
+- `src/rules/` — rule parsing, applicability, execution helpers.
+- `src/schedulers/` — `greedy`, `bandit`, `lookahead` strategy modules.
+- `src/pipeline/` — orchestration stubs (`orchestrator.py`, `run_rewrite.py`).
+- `rule_library/` — canonical rules (`standard.txt`) + Java mapping self-check.
+- `tests/` — unit tests (includes Stage 1 tests).
+- `configs/` — currently only `__init__.py` (no runnable `*.yaml` config yet).
 
-Choose one method:
+Important output from Stage 1:
 
-### Option A: Conda (recommended)
+- `outputs/stage1/<query_id>.json` (strict machine-readable artifact)
+- `outputs/stage1/<query_id>.csv` (single-row inspection sidecar when enabled)
+
+---
+
+## 2) How to run (start from environment setup)
+
+### Step 0: create environment
+
+#### Option A: Conda (recommended)
 
 ```bash
 conda env create -f environment.yml
 conda activate query-rewrite
 ```
 
-Conda env includes Python tooling (`pytest`) and Java tooling (`openjdk`, `maven`) for
-`rule_library/java/RuleMappingSelfCheck.java`.
-
-### Option B: pip
+#### Option B: pip + venv
 
 ```bash
 python -m venv .venv
@@ -70,42 +43,55 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 ```
 
-If you need to run the Java rule-mapping self-check, install JDK + Maven separately when
-using the pip route.
+> Note: if you want to run Java self-check (`RuleMappingSelfCheck.java`) with pip route, install JDK + Maven separately.
 
-## 6) How to Run
-
-`lookahead.yaml` here is an **experiment strategy config** (scheduler choice), not an environment file.
-It is only an example run command:
+### Step 1: run tests (recommended first)
 
 ```bash
-python -m src.main --config configs/lookahead.yaml
+pytest -q
 ```
 
-## 7) Stage 1 Outputs
+### Step 2: run Stage 1 generator (CLI)
 
-Stage 1 candidate generation writes one file pair per query under `outputs/stage1/`:
+Set API key first:
 
-- `<query_id>.json`: strict machine-readable payload for Stage 2.
-- `<query_id>.csv`: one-row sidecar for quick manual inspection.
+```bash
+export OPENAI_API_KEY="<your_api_key>"
+```
 
-The CSV includes columns:
+Then run:
 
-- `query_id`
-- `original_sql`
-- `candidate_pool_size`
-- `candidate_rules` (JSON array string)
-- `llm_recommended_order` (JSON array string)
+```bash
+python -m scripts.run_stage1 \
+  --query-id q_001 \
+  --original-sql "SELECT * FROM t WHERE a > 1" \
+  --max-rules 5 \
+  --include-empty \
+  --save-csv \
+  --llm-model gpt-4.1-mini \
+  --prompt-version v1 \
+  --output-dir outputs/stage1 \
+  --rule-library rule_library/standard.txt
+```
 
-## 8) Methods
-- **Greedy:** Selects the immediate best candidate by current estimated gain.
-- **Bandit:** Balances exploration/exploitation across rewrite rules.
-- **Lookahead (main method):** Estimates multi-step benefit before choosing the next rule.
+This command prints Stage 1 JSON and writes:
 
-## 9) Baselines
-- **Fixed order:** Apply rewrite rules in a predefined static sequence.
-- **LLM-based (optional):** Use an LLM to propose rewrites or rule sequences.
+- `outputs/stage1/q_001.json`
+- `outputs/stage1/q_001.csv`
 
-## 10) Future Work
-- **RL-based schedulers:** Learn adaptive policies from long-horizon rewards.
-- **Deeper LLM integration:** Use LLMs for candidate proposal, pruning, or policy guidance.
+### Where API is configured
+
+- CLI params:
+  - `--api-base-url` (default `https://api.openai.com/v1`)
+  - `--api-key-env-var` (default `OPENAI_API_KEY`)
+- Config object: `Stage1Config.api_base_url`, `Stage1Config.api_key_env_var`
+- HTTP client implementation: `src/llm/openai_compatible_client.py`
+
+### Step 3: (optional) validate rule mapping with Java self-check
+
+```bash
+javac -d . rule_library/java/RuleMappingSelfCheck.java
+java -cp .:<your_calcite_classpath> rulecheck.RuleMappingSelfCheck rule_library/standard.txt
+```
+
+For classpath generation details, see `rule_library/README.md`.

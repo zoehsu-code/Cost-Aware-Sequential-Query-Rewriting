@@ -16,6 +16,8 @@ class Stage1Config:
     prompt_version: str = "v1"
     output_dir: Path = Path("outputs/stage1")
     save_csv: bool = True
+    api_base_url: str = "https://api.openai.com/v1"
+    api_key_env_var: str = "OPENAI_API_KEY"
 
     def __post_init__(self) -> None:
         if self.max_rules <= 0:
@@ -24,3 +26,7 @@ class Stage1Config:
             raise ValueError("llm_model must be non-empty")
         if not self.prompt_version:
             raise ValueError("prompt_version must be non-empty")
+        if not self.api_base_url:
+            raise ValueError("api_base_url must be non-empty")
+        if not self.api_key_env_var:
+            raise ValueError("api_key_env_var must be non-empty")
