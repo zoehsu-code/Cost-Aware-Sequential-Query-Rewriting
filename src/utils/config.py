@@ -16,8 +16,8 @@ class Stage1Config:
     prompt_version: str = "v1"
     output_dir: Path = Path("outputs/stage1")
     save_csv: bool = True
-    api_base_url: str = "https://api.openai.com/v1"
-    api_key_env_var: str = "OPENAI_API_KEY"
+    api_base_url: str = "https://genai.vocareum.com/v1"
+    api_key_env_var: str = "VOC_API_KEY"
 
     def __post_init__(self) -> None:
         if self.max_rules <= 0:

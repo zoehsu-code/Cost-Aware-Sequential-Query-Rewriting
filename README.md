@@ -1,5 +1,7 @@
 # Sequential Rule Scheduling for Query Rewrite
 
+This README is intentionally minimal and focuses only on the Stage 1 runbook.
+
 ## 1) Project overview and pipeline
 
 This repository uses a two-stage rewrite workflow:
@@ -86,7 +88,7 @@ q_002,SELECT c FROM t2 WHERE c IS NOT NULL
 Set API key (online mode):
 
 ```bash
-export OPENAI_API_KEY="<your_api_key>"
+export VOC_API_KEY="<your_api_key>"
 ```
 
 Run:
@@ -99,8 +101,18 @@ python -m scripts.run_stage1 \
   --save-csv \
   --llm-model gpt-4.1-mini \
   --prompt-version v1 \
+  --api-base-url https://genai.vocareum.com/v1 \
   --output-dir outputs/stage1 \
   --rule-library rule_library/standard.txt
+```
+
+You can also pass key directly:
+
+```bash
+python -m scripts.run_stage1 \
+  --input-csv data/queries/stage1_input.csv \
+  --api-base-url https://genai.vocareum.com/v1 \
+  --api-key "voc-xxxxxxxx"
 ```
 
 ---

@@ -46,8 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-version", default="v1")
     parser.add_argument("--output-dir", default="outputs/stage1")
     parser.add_argument("--rule-library", default="rule_library/standard.txt")
-    parser.add_argument("--api-base-url", default="https://api.openai.com/v1")
-    parser.add_argument("--api-key-env-var", default="OPENAI_API_KEY")
+    parser.add_argument("--api-base-url", default="https://genai.vocareum.com/v1")
+    parser.add_argument("--api-key-env-var", default="VOC_API_KEY")
+    parser.add_argument("--api-key", default=None)
     parser.add_argument(
         "--llm-mode",
         choices=["openai", "offline"],
@@ -82,7 +83,9 @@ def main() -> None:
             llm_client = OfflineStubLLMClient()
         else:
             llm_client = OpenAICompatibleLLMClient(
-                base_url=config.api_base_url, api_key_env_var=config.api_key_env_var
+                base_url=config.api_base_url,
+                api_key_env_var=config.api_key_env_var,
+                api_key=args.api_key,
             )
     generator = Stage1CandidateGenerator(config=config, llm_client=llm_client)
     rules = load_standard_rule_library(Path(args.rule_library))

@@ -3,5 +3,6 @@ dependencies:
   - python=3.11
   - pip
   - pytest>=8
+  - requests>=2.32
   - openjdk=17
   - maven>=3.9
