@@ -135,34 +135,39 @@ class Stage1CandidateGenerator:
         return output
 
     def save_output(self, output: dict[str, Any]) -> Path:
-        """Save one JSON file per query for Stage 2 consumption (and optional CSV sidecar)."""
+        """Save one JSON file per query under a JSON subfolder (and optional CSV sidecar)."""
 
         output_dir = self.config.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
-        path = output_dir / f"{output['query_id']}.json"
+        json_dir = output_dir / "json"
+        json_dir.mkdir(parents=True, exist_ok=True)
+        path = json_dir / f"{output['query_id']}.json"
         path.write_text(json.dumps(output, indent=2), encoding="utf-8")
         if self.config.save_csv:
             self.save_output_csv(output)
         return path
 
     def save_output_csv(self, output: dict[str, Any]) -> Path:
-        """Save one CSV sidecar per query for human inspection."""
+        """Append output row into one consolidated CSV for human inspection."""
 
         output_dir = self.config.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
-        path = output_dir / f"{output['query_id']}.csv"
-        with path.open("w", newline="", encoding="utf-8") as handle:
+        path = output_dir / "stage1_results.csv"
+        fieldnames = [
+            "query_id",
+            "original_sql",
+            "candidate_pool_size",
+            "candidate_rules",
+            "llm_recommended_order",
+        ]
+        file_exists = path.exists() and path.stat().st_size > 0
+        with path.open("a", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(
                 handle,
-                fieldnames=[
-                    "query_id",
-                    "original_sql",
-                    "candidate_pool_size",
-                    "candidate_rules",
-                    "llm_recommended_order",
-                ],
+                fieldnames=fieldnames,
             )
-            writer.writeheader()
+            if not file_exists:
+                writer.writeheader()
             writer.writerow(
                 {
                     "query_id": output["query_id"],

@@ -110,8 +110,10 @@ def main() -> None:
                             "dry_run": True,
                             "query_id": query_id,
                             "prompt_chars": len(prompt),
-                            "planned_output_json": str(config.output_dir / f"{query_id}.json"),
-                            "planned_output_csv": str(config.output_dir / f"{query_id}.csv"),
+                            "planned_output_json": str(
+                                config.output_dir / "json" / f"{query_id}.json"
+                            ),
+                            "planned_output_csv": str(config.output_dir / "stage1_results.csv"),
                         },
                         ensure_ascii=False,
                     )
@@ -133,8 +135,10 @@ def main() -> None:
                     "dry_run": True,
                     "query_id": args.query_id,
                     "prompt_chars": len(prompt),
-                    "planned_output_json": str(config.output_dir / f"{args.query_id}.json"),
-                    "planned_output_csv": str(config.output_dir / f"{args.query_id}.csv"),
+                    "planned_output_json": str(
+                        config.output_dir / "json" / f"{args.query_id}.json"
+                    ),
+                    "planned_output_csv": str(config.output_dir / "stage1_results.csv"),
                 },
                 indent=2,
                 ensure_ascii=False,

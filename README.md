@@ -6,7 +6,7 @@ This README is intentionally minimal and focuses only on the Stage 1 runbook.
 
 This repository uses a two-stage rewrite workflow:
 
-- **Stage 1 (current runnable part):** LLM selects a query-specific candidate rule pool from `rule_library/standard.txt` and writes one JSON + one CSV per query.
+- **Stage 1 (current runnable part):** LLM selects a query-specific candidate rule pool from `rule_library/standard.txt` and writes JSON files under `outputs/stage1/json/` plus one consolidated CSV.
 - **Stage 2:** scheduler/executor applies selected rules sequentially (separate module, not covered by this README runbook).
 
 Pipeline:
@@ -14,7 +14,7 @@ Pipeline:
 1. Prepare runtime environment.
 2. Run rule mapping self-check (`standard.txt` -> Calcite rule holders).
 3. Run Stage 1 with input query CSV.
-4. Get per-query outputs in `outputs/stage1/`.
+4. Get per-query outputs in `outputs/stage1/json/` and summary CSV in `outputs/stage1/`.
 
 ---
 
@@ -83,7 +83,7 @@ q_002,SELECT c FROM t2 WHERE c IS NOT NULL
 
 ---
 
-### Step 3: run Stage 1 from query CSV and output per-query CSV
+### Step 3: run Stage 1 from query CSV and output consolidated CSV
 
 Set API key (online mode):
 
@@ -121,7 +121,7 @@ python -m scripts.run_stage1 \
 
 For each input row (`query_id`):
 
-- `outputs/stage1/<query_id>.json`
-- `outputs/stage1/<query_id>.csv`
+- `outputs/stage1/json/<query_id>.json`
+- consolidated CSV: `outputs/stage1/stage1_results.csv`
 
-So if your input has 10 queries, output will contain 10 JSON + 10 CSV files.
+So if your input has 10 queries, output will contain 10 JSON files + 1 CSV file.
