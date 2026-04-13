@@ -53,6 +53,8 @@ pytest -q
 
 ### Step 2: run Stage 1 generator (CLI)
 
+#### Option A: online mode (real LLM API)
+
 Set API key first:
 
 ```bash
@@ -70,6 +72,22 @@ python -m scripts.run_stage1 \
   --save-csv \
   --llm-model gpt-4.1-mini \
   --prompt-version v1 \
+  --output-dir outputs/stage1 \
+  --rule-library rule_library/standard.txt
+```
+
+#### Option B: offline mode (no AI API needed)
+
+If you do not have ChatGPT/OpenAI API access, run with `--llm-mode offline`:
+
+```bash
+python -m scripts.run_stage1 \
+  --query-id q_001 \
+  --original-sql "SELECT * FROM t WHERE a > 1" \
+  --max-rules 5 \
+  --include-empty \
+  --save-csv \
+  --llm-mode offline \
   --output-dir outputs/stage1 \
   --rule-library rule_library/standard.txt
 ```
@@ -102,6 +120,7 @@ python -m scripts.run_stage1 \
   --max-rules 5 \
   --include-empty \
   --save-csv \
+  --llm-mode offline \
   --output-dir outputs/stage1 \
   --rule-library rule_library/standard.txt
 ```
@@ -111,6 +130,7 @@ python -m scripts.run_stage1 \
 - CLI params:
   - `--api-base-url` (default `https://api.openai.com/v1`)
   - `--api-key-env-var` (default `OPENAI_API_KEY`)
+  - `--llm-mode` (`openai` or `offline`)
 - Config object: `Stage1Config.api_base_url`, `Stage1Config.api_key_env_var`
 - HTTP client implementation: `src/llm/openai_compatible_client.py`
 

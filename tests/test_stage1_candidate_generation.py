@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from src.llm.offline_stub_client import OfflineStubLLMClient
 from src.llm.stage1_candidate_generation import Stage1CandidateGenerator, Stage1Input
 from src.rules.rule_library import CalciteRule, load_standard_rule_library
 from src.utils.config import Stage1Config
@@ -118,3 +119,21 @@ def test_load_standard_rule_library_supports_section_headers_and_dedup(tmp_path:
         "PROJECT_REDUCE_EXPRESSIONS",
         "PROJECT_TO_CALC",
     ]
+
+
+def test_offline_stub_client_generates_valid_stage1_payload(tmp_path: Path) -> None:
+    config = Stage1Config(max_rules=3, include_empty=True, output_dir=tmp_path)
+    stage_input = Stage1Input(query_id="q_offline", original_sql="SELECT * FROM orders")
+    rules = [
+        CalciteRule("FILTER_INTO_JOIN", "Push filter into join"),
+        CalciteRule("PROJECT_TO_CALC", "Convert project to calc"),
+        CalciteRule("JOIN_EXTRACT_FILTER", "Extract filter from join"),
+    ]
+
+    generator = Stage1CandidateGenerator(config=config, llm_client=OfflineStubLLMClient())
+    result = generator.run_for_query(stage_input, rules)
+
+    assert result["query_id"] == "q_offline"
+    assert result["candidate_pool_size"] == 3
+    assert result["candidate_rules"] == ["FILTER_INTO_JOIN", "PROJECT_TO_CALC", "EMPTY"]
+    assert result["llm_recommended_order"] == ["FILTER_INTO_JOIN", "PROJECT_TO_CALC", "EMPTY"]

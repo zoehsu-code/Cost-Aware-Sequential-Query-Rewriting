@@ -7,6 +7,7 @@ import csv
 import json
 from pathlib import Path
 
+from src.llm.offline_stub_client import OfflineStubLLMClient
 from src.llm.openai_compatible_client import OpenAICompatibleLLMClient
 from src.llm.stage1_candidate_generation import Stage1CandidateGenerator, Stage1Input
 from src.rules.rule_library import load_standard_rule_library
@@ -40,6 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rule-library", default="rule_library/standard.txt")
     parser.add_argument("--api-base-url", default="https://api.openai.com/v1")
     parser.add_argument("--api-key-env-var", default="OPENAI_API_KEY")
+    parser.add_argument(
+        "--llm-mode",
+        choices=["openai", "offline"],
+        default="openai",
+        help="Use 'offline' to test without any external AI API.",
+    )
     return parser
 
 
@@ -57,9 +64,12 @@ def main() -> None:
         api_base_url=args.api_base_url,
         api_key_env_var=args.api_key_env_var,
     )
-    llm_client = OpenAICompatibleLLMClient(
-        base_url=config.api_base_url, api_key_env_var=config.api_key_env_var
-    )
+    if args.llm_mode == "offline":
+        llm_client = OfflineStubLLMClient()
+    else:
+        llm_client = OpenAICompatibleLLMClient(
+            base_url=config.api_base_url, api_key_env_var=config.api_key_env_var
+        )
     generator = Stage1CandidateGenerator(config=config, llm_client=llm_client)
     rules = load_standard_rule_library(Path(args.rule_library))
 
