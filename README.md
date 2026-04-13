@@ -92,6 +92,22 @@ python -m scripts.run_stage1 \
   --rule-library rule_library/standard.txt
 ```
 
+#### Option C: dry-run preflight (recommended before spending API calls)
+
+This checks CSV parsing, rule-library loading, and prompt building, but **never calls LLM**:
+
+```bash
+python -m scripts.run_stage1 \
+  --input-csv data/queries/stage1_input.csv \
+  --max-rules 5 \
+  --include-empty \
+  --dry-run \
+  --output-dir outputs/stage1 \
+  --rule-library rule_library/standard.txt
+```
+
+Use this mode first to ensure your inputs are valid, then remove `--dry-run` for real API runs.
+
 This command prints Stage 1 JSON and writes:
 
 - `outputs/stage1/q_001.json`
@@ -131,6 +147,7 @@ python -m scripts.run_stage1 \
   - `--api-base-url` (default `https://api.openai.com/v1`)
   - `--api-key-env-var` (default `OPENAI_API_KEY`)
   - `--llm-mode` (`openai` or `offline`)
+  - `--dry-run` (no LLM call; input/prompt preflight only)
 - Config object: `Stage1Config.api_base_url`, `Stage1Config.api_key_env_var`
 - HTTP client implementation: `src/llm/openai_compatible_client.py`
 

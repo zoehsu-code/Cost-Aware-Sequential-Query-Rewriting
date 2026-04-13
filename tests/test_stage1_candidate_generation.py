@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -137,3 +140,29 @@ def test_offline_stub_client_generates_valid_stage1_payload(tmp_path: Path) -> N
     assert result["candidate_pool_size"] == 3
     assert result["candidate_rules"] == ["FILTER_INTO_JOIN", "PROJECT_TO_CALC", "EMPTY"]
     assert result["llm_recommended_order"] == ["FILTER_INTO_JOIN", "PROJECT_TO_CALC", "EMPTY"]
+
+
+def test_cli_dry_run_does_not_require_llm_api(tmp_path: Path) -> None:
+    output_dir = tmp_path / "outputs"
+    cmd = [
+        sys.executable,
+        "-m",
+        "scripts.run_stage1",
+        "--query-id",
+        "q_dry",
+        "--original-sql",
+        "SELECT 1",
+        "--max-rules",
+        "3",
+        "--dry-run",
+        "--output-dir",
+        str(output_dir),
+        "--rule-library",
+        "rule_library/standard.txt",
+    ]
+    proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    payload = json.loads(proc.stdout)
+    assert payload["dry_run"] is True
+    assert payload["query_id"] == "q_dry"
+    assert "planned_output_json" in payload
+    assert not (output_dir / "q_dry.json").exists()
