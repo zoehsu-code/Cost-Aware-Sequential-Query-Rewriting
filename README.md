@@ -99,7 +99,7 @@ python -m scripts.run_stage1 \
   --max-rules 5 \
   --include-empty \
   --save-csv \
-  --llm-model gpt-4.1-mini \
+  --llm-model @azure-1/gpt-4o \
   --prompt-version v1 \
   --api-base-url https://genai.vocareum.com/v1 \
   --output-dir outputs/stage1 \
