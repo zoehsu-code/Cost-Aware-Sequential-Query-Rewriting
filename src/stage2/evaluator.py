@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import math
 import time
+from collections import Counter
+from decimal import Decimal
 from pathlib import Path
 
 
@@ -82,20 +83,42 @@ class BenchmarkEvaluator:
         return sum(trimmed) / len(trimmed)
 
     @staticmethod
+    def normalize_value(value):
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float, Decimal)):
+            return round(float(value), 8)
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace").strip()
+        return str(value).strip()
+
+    @classmethod
     def are_equivalent(
+        cls,
         original_columns: list[str],
         original_rows: list[tuple],
         rewritten_columns: list[str],
         rewritten_rows: list[tuple],
     ) -> bool:
-        if original_columns != rewritten_columns:
+        if len(original_columns) != len(rewritten_columns):
+            return False
+        if len(original_rows) != len(rewritten_rows):
             return False
 
-        def normalize(rows: list[tuple]) -> list[str]:
-            normalized: list[str] = []
-            for row in rows:
-                normalized.append(json.dumps(list(row), sort_keys=True, default=str, ensure_ascii=False))
-            normalized.sort()
-            return normalized
+        normalized_original = Counter(
+            tuple(cls.normalize_value(value) for value in row) for row in original_rows
+        )
+        normalized_rewritten = Counter(
+            tuple(cls.normalize_value(value) for value in row) for row in rewritten_rows
+        )
+        return normalized_original == normalized_rewritten
 
-        return normalize(original_rows) == normalize(rewritten_rows)
+    def are_equivalent_sql(self, original_sql: str, rewritten_sql: str) -> bool:
+        try:
+            original_columns, original_rows = self.execute_query(original_sql)
+            rewritten_columns, rewritten_rows = self.execute_query(rewritten_sql)
+        except Exception:
+            return False
+        return self.are_equivalent(original_columns, original_rows, rewritten_columns, rewritten_rows)
