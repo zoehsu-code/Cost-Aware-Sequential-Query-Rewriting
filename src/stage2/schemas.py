@@ -11,6 +11,7 @@ OUTPUT_COLUMNS = [
     "policy",
     "selected_rules",
     "final_rule_sequence",
+    "step_rewards",
     "original_sql",
     "rewritten_sql",
     "original_trimmed_mean_sec",
@@ -45,6 +46,7 @@ class Stage2ResultRow:
     policy: str
     selected_rules: list[str]
     final_rule_sequence: list[str]
+    step_rewards: list[float]
     original_sql: str
     rewritten_sql: str
     original_trimmed_mean_sec: float | None
@@ -68,6 +70,7 @@ class Stage2ResultRow:
             "policy": self.policy,
             "selected_rules": json.dumps(self.selected_rules, ensure_ascii=False),
             "final_rule_sequence": json.dumps(self.final_rule_sequence, ensure_ascii=False),
+            "step_rewards": json.dumps(self.step_rewards, ensure_ascii=False),
             "original_sql": self.original_sql,
             "rewritten_sql": self.rewritten_sql,
             "original_trimmed_mean_sec": self.original_trimmed_mean_sec,

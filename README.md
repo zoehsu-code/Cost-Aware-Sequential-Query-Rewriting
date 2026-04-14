@@ -151,6 +151,70 @@ python -m scripts.run_stage2_greedy \
 ```
 
 Notes:
+- Stage 2 defaults to `tpch`: if `--benchmark` is omitted, `tpch` is used.
 - `max_steps` is fixed to `3` in Stage 2.
 - Greedy uses early stopping: stop if `best_reward <= 0`.
 - Rewrite payload format sent to Java process is JSON array: `[db_id, sql, rule]` (`db_id` is optional in CLI; default is benchmark name).
+- If you have your own rewrite engine jar (for example `rewriter_java.jar`), place it under
+  `rule_library/calcite_core_main_jar/` and pass it explicitly to avoid auto-discovery ambiguity:
+
+```bash
+python -m scripts.run_stage2_llm_sequence \
+  --stage1-csv outputs/stage1/stage1_results.csv \
+  --output-csv outputs/stage2/llm_sequence.csv \
+  --benchmark tpch \
+  --rewrite-jar-path rule_library/calcite_core_main_jar/rewriter_java.jar
+```
+
+You can also put the jar anywhere else and provide an absolute/relative path via `--rewrite-jar-path`.
+
+Quick check to confirm the command is running on TPC-H:
+
+```bash
+python -m scripts.run_stage2_llm_sequence --help
+```
+
+In the help output, you should see `--benchmark {tpch,tpchj}` with default `tpch`.
+
+### How reward is computed today
+
+- **Reward is explicitly used only by the `greedy` policy**.  
+  For each candidate rewrite at a step, reward is:
+
+  `reward = current_latency - candidate_latency`
+
+  Here latency is the measured trimmed-mean execution time on the benchmark.
+  Therefore:
+  - `reward > 0`: candidate SQL is faster (positive gain)
+  - `reward = 0`: no gain
+  - `reward < 0`: candidate SQL is slower
+
+- **`greedy` accepts only the rule with the highest reward at each step**, and stops early when `best_reward <= 0`.
+
+- **`llm_sequence` does not use reward for step-by-step decision making**; it applies the chosen sequence directly.
+
+- In final Stage 2 outputs, the overall gain-related fields are:
+  - `improvement_sec = original_trimmed_mean_sec - rewritten_trimmed_mean_sec`
+  - `speedup_ratio = original_trimmed_mean_sec / rewritten_trimmed_mean_sec` (when denominator > 0)
+- Stage 2 CSV includes `step_rewards` (JSON array) to explicitly record the reward for each accepted step (populated for `greedy`; empty for `llm_sequence`).
+
+### How `is equivalent` is decided
+
+Stage 2 sets `equivalence_result` using `BenchmarkEvaluator.are_equivalent(...)` with this logic:
+
+> This equivalence check is implemented in this repository's Python code (`src/stage2/evaluator.py`), not inside `rewrite.jar`.
+
+1. **Column count must match**. If column counts differ, result is immediately `False`.
+2. **Row count must match** (including duplicates). If row counts differ, result is immediately `False`.
+3. Each cell is normalized with:
+   - `None -> None`
+   - `bool -> keep as-is`
+   - `int/float/Decimal -> round(float(x), 8)`
+   - `bytes -> decode utf-8 (replace errors) and strip`
+   - other types -> `str(x).strip()`
+4. Each row is converted to a normalized tuple and compared as a multiset (`Counter`).
+
+So this is effectively a **bag-equality check with strict column-count matching**:
+- Row order does **not** matter.
+- Duplicate rows still matter (multiset semantics).
+- If either SQL execution fails, the method returns `False` (no pipeline interruption).
