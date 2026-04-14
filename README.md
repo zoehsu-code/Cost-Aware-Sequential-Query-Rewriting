@@ -125,3 +125,32 @@ For each input row (`query_id`):
 - consolidated CSV: `outputs/stage1/stage1_results.csv`
 
 So if your input has 10 queries, output will contain 10 JSON files + 1 CSV file.
+
+---
+
+## 4) Stage 2 (implemented policies: `llm_sequence`, `greedy`)
+
+Stage 2 reads Stage 1 CSV only (no Stage 1 imports), performs real rewrite by calling Java jar, executes SQL on real benchmark (DuckDB TPC-H/TPC-HJ), and writes summary CSV.
+
+### Run llm_sequence
+
+```bash
+python -m scripts.run_stage2_llm_sequence \
+  --stage1-csv outputs/stage1/stage1_results.csv \
+  --output-csv outputs/stage2/llm_sequence.csv \
+  --benchmark tpch
+```
+
+### Run greedy
+
+```bash
+python -m scripts.run_stage2_greedy \
+  --stage1-csv outputs/stage1/stage1_results.csv \
+  --output-csv outputs/stage2/greedy.csv \
+  --benchmark tpch
+```
+
+Notes:
+- `max_steps` is fixed to `3` in Stage 2.
+- Greedy uses early stopping: stop if `best_reward <= 0`.
+- Rewrite payload format sent to Java process is JSON array: `[db_id, sql, rule]` (`db_id` is optional in CLI; default is benchmark name).
