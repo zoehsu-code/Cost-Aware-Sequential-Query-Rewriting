@@ -36,6 +36,7 @@ class Stage2InputRow:
     candidate_rules: list[str]
     llm_recommended_order: list[str]
     llm_latency_ms: float | None = None
+    greedy_step_reward_overrides: list[dict[str, float]] | None = None
 
 
 @dataclass

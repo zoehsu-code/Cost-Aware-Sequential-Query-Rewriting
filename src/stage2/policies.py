@@ -59,7 +59,13 @@ def greedy_policy(
     apply_rule: Callable[[str, str], tuple[str, float]],
     latency_of_sql: Callable[[str], float],
 ) -> PolicyResult:
-    """Greedy policy with real reward = current_latency - candidate_latency."""
+    """Greedy policy with optional per-step reward overrides.
+
+    Default reward is real latency delta:
+        reward = current_latency - candidate_latency
+    If row.greedy_step_reward_overrides is provided, current step can override
+    reward by rule name, e.g. [{"R1": 1.2, "R2": -0.1}, {"R2": 0.6}].
+    """
 
     current_sql = row.original_sql
     current_latency = latency_of_sql(current_sql)
