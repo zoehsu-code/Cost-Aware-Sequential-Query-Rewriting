@@ -196,10 +196,8 @@ In the help output, you should see `--benchmark {tpch,tpchj}` with default `tpch
   - `reward < 0`: candidate SQL is slower
 
 - **`greedy` accepts only the rule with the highest reward at each step**, and stops early when `best_reward <= 0`.
-- You can explicitly feed per-step rewards via optional Stage 1 CSV field `greedy_step_reward_overrides`
-  (JSON array of objects), e.g. `[{"R1": 1.2, "R2": -0.1}, {"R2": 0.6}]`.
-  At each greedy step, if current rule has an override value, that override is used as reward;
-  otherwise it falls back to latency-delta reward.
+- During greedy execution, Stage 2 prints per-step `candidate_rewards`, `best_rule`, and `best_reward`
+  to stdout so you can directly inspect the computed reward values for each remaining rule.
 
 - **`llm_sequence` does not use reward for step-by-step decision making**; it applies the chosen sequence directly.
 
