@@ -49,7 +49,6 @@ class Stage2Runner:
 
         self._latency_cache: dict[str, float] = {}
         self._equivalence_cache: dict[str, bool] = {}
-        self._original_result_cache: dict[str, tuple[list[str], list[tuple]]] = {}
 
     def _apply_rule(self, current_sql: str, rule: str) -> tuple[str, float]:
         resolved_db_id = self.config.db_id or self.config.benchmark
@@ -67,21 +66,11 @@ class Stage2Runner:
         return latency
 
     def _is_equivalent_to_original(self, original_sql: str, candidate_sql: str) -> bool:
-        if candidate_sql in self._equivalence_cache:
-            return self._equivalence_cache[candidate_sql]
-
-        if original_sql not in self._original_result_cache:
-            self._original_result_cache[original_sql] = self.evaluator.execute_query(original_sql)
-        original_columns, original_rows = self._original_result_cache[original_sql]
-
-        candidate_columns, candidate_rows = self.evaluator.execute_query(candidate_sql)
-        result = self.evaluator.are_equivalent(
-            original_columns,
-            original_rows,
-            candidate_columns,
-            candidate_rows,
-        )
-        self._equivalence_cache[candidate_sql] = result
+        key = f"{original_sql}\n---\n{candidate_sql}"
+        if key in self._equivalence_cache:
+            return self._equivalence_cache[key]
+        result = self.evaluator.are_equivalent_sql(original_sql, candidate_sql)
+        self._equivalence_cache[key] = result
         return result
 
     def _run_one_row(self, row) -> Stage2ResultRow:
@@ -91,6 +80,7 @@ class Stage2Runner:
         error_message: str | None = None
         rewritten_sql = row.original_sql
         final_sequence: list[str] = []
+        step_rewards: list[float] = []
         rewrite_latency_sec = 0.0
         equivalence_result = True
 
@@ -107,14 +97,18 @@ class Stage2Runner:
                     max_steps=MAX_STEPS,
                     apply_rule=self._apply_rule,
                     latency_of_sql=self._latency_of_sql,
-                    is_equivalent=lambda sql: self._is_equivalent_to_original(row.original_sql, sql),
                 )
             else:
                 raise ValueError("Unsupported policy. Only 'llm_sequence' and 'greedy' are allowed")
 
             rewritten_sql = policy_result.final_sql
             final_sequence = policy_result.final_rule_sequence
+            step_rewards = policy_result.step_rewards
             rewrite_latency_sec = policy_result.rewrite_latency_sec
+            print(
+                f"[Stage2] query_id={row.query_id} policy={policy} "
+                f"final_rule_sequence={final_sequence} step_rewards={step_rewards}"
+            )
             equivalence_result = self._is_equivalent_to_original(row.original_sql, rewritten_sql)
         except Exception as exc:
             rewrite_success = False
@@ -144,6 +138,7 @@ class Stage2Runner:
             policy=policy,
             selected_rules=row.candidate_rules,
             final_rule_sequence=final_sequence,
+            step_rewards=step_rewards,
             original_sql=row.original_sql,
             rewritten_sql=rewritten_sql,
             original_trimmed_mean_sec=original_latency,

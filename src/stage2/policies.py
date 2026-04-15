@@ -12,6 +12,7 @@ from src.stage2.schemas import MAX_STEPS, Stage2InputRow
 class PolicyResult:
     final_sql: str
     final_rule_sequence: list[str]
+    step_rewards: list[float]
     rewrite_latency_sec: float
 
 
@@ -46,6 +47,7 @@ def llm_sequence_policy(
     return PolicyResult(
         final_sql=current_sql,
         final_rule_sequence=sequence,
+        step_rewards=[],
         rewrite_latency_sec=total_rewrite_latency,
     )
 
@@ -56,7 +58,6 @@ def greedy_policy(
     max_steps: int = MAX_STEPS,
     apply_rule: Callable[[str, str], tuple[str, float]],
     latency_of_sql: Callable[[str], float],
-    is_equivalent: Callable[[str], bool],
 ) -> PolicyResult:
     """Greedy policy with real reward = current_latency - candidate_latency."""
 
@@ -64,6 +65,7 @@ def greedy_policy(
     current_latency = latency_of_sql(current_sql)
     remaining_rules = _clean_rule_list(row.candidate_rules)
     sequence: list[str] = []
+    step_rewards: list[float] = []
     total_rewrite_latency = 0.0
 
     for _ in range(max_steps):
@@ -76,9 +78,6 @@ def greedy_policy(
             try:
                 rewritten_sql, rewrite_latency = apply_rule(current_sql, rule)
             except Exception:
-                continue
-
-            if not is_equivalent(rewritten_sql):
                 continue
 
             candidate_latency = latency_of_sql(rewritten_sql)
@@ -99,11 +98,13 @@ def greedy_policy(
         current_sql = best_sql if best_sql is not None else current_sql
         current_latency = latency_of_sql(current_sql)
         sequence.append(best_rule)
+        step_rewards.append(best_reward)
         total_rewrite_latency += best_rewrite_latency
         remaining_rules.remove(best_rule)
 
     return PolicyResult(
         final_sql=current_sql,
         final_rule_sequence=sequence,
+        step_rewards=step_rewards,
         rewrite_latency_sec=total_rewrite_latency,
     )
