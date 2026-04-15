@@ -105,6 +105,10 @@ class Stage2Runner:
             final_sequence = policy_result.final_rule_sequence
             step_rewards = policy_result.step_rewards
             rewrite_latency_sec = policy_result.rewrite_latency_sec
+            print(
+                f"[Stage2] query_id={row.query_id} policy={policy} "
+                f"final_rule_sequence={final_sequence} step_rewards={step_rewards}"
+            )
             equivalence_result = self._is_equivalent_to_original(row.original_sql, rewritten_sql)
         except Exception as exc:
             rewrite_success = False

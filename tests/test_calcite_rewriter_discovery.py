@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import zipfile
+from types import SimpleNamespace
 from pathlib import Path
 
 from src.stage2.calcite_rewriter import CalciteRewriter
@@ -48,3 +49,26 @@ def test_discover_rewrite_jar_prefers_runnable_priority_jar(tmp_path: Path, monk
     discovered = CalciteRewriter._discover_rewrite_jar()
 
     assert discovered.name == "calcite.core.main.jar"
+
+
+def test_apply_rule_falls_back_to_stdin_payload_mode(tmp_path: Path, monkeypatch) -> None:
+    jar_path = tmp_path / "rewriter_java.jar"
+    _make_fake_jar(jar_path, main_class="com.example.Main", include_main_class_file=True)
+    rewriter = CalciteRewriter(jar_path=jar_path, java_main_class="com.example.Main")
+
+    calls: list[tuple[list[str], str | None]] = []
+
+    def _fake_run(cmd, *, input=None, **kwargs):
+        calls.append((cmd, input))
+        if len(calls) == 1:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="SELECT 1", stderr="")
+
+    monkeypatch.setattr("src.stage2.calcite_rewriter.subprocess.run", _fake_run)
+
+    rewritten_sql, _ = rewriter.apply_rule(db_id="tpch", sql="SELECT 1", rule="PROJECT_TO_CALC")
+
+    assert rewritten_sql == "SELECT 1"
+    assert len(calls) == 2
+    assert calls[0][1] is None
+    assert calls[1][1] is not None

@@ -87,12 +87,12 @@ class CalciteRewriter:
                 return None
         return None
 
-    def _build_java_cmd(self, payload: str) -> list[str]:
+    def _build_java_cmd(self) -> list[str]:
         if self.java_main_class:
             jar_dir = self.jar_path.parent
             classpath = os.pathsep.join(str(p) for p in sorted(jar_dir.glob("*.jar")))
-            return ["java", "-cp", classpath, self.java_main_class, payload]
-        return ["java", "-jar", str(self.jar_path), payload]
+            return ["java", "-cp", classpath, self.java_main_class]
+        return ["java", "-jar", str(self.jar_path)]
 
     @staticmethod
     def _parse_rewrite_stdout(stdout_text: str) -> str:
@@ -121,11 +121,12 @@ class CalciteRewriter:
             return self._rewrite_cache[cache_key]
 
         payload = json.dumps([db_id, sql, rule], ensure_ascii=False)
-        cmd = self._build_java_cmd(payload)
+        cmd_base = self._build_java_cmd()
 
+        # Prefer argv payload style first; fallback to stdin payload for jars that expect stdin JSON.
         start = time.perf_counter()
         completed = subprocess.run(
-            cmd,
+            [*cmd_base, payload],
             check=False,
             capture_output=True,
             text=True,
@@ -133,11 +134,37 @@ class CalciteRewriter:
         )
         elapsed = time.perf_counter() - start
 
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"Rewrite subprocess failed (code={completed.returncode}): {completed.stderr.strip()}"
+        rewritten_sql: str | None = None
+        first_error: str | None = None
+        if completed.returncode == 0:
+            try:
+                rewritten_sql = self._parse_rewrite_stdout(completed.stdout)
+            except Exception as exc:  # noqa: PERF203
+                first_error = str(exc)
+        else:
+            first_error = (
+                f"argv mode failed (code={completed.returncode}): {completed.stderr.strip()}"
             )
 
-        rewritten_sql = self._parse_rewrite_stdout(completed.stdout)
+        if rewritten_sql is None:
+            start_fallback = time.perf_counter()
+            completed_fallback = subprocess.run(
+                cmd_base,
+                input=payload,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_sec,
+            )
+            elapsed += time.perf_counter() - start_fallback
+            if completed_fallback.returncode != 0:
+                raise RuntimeError(
+                    "Rewrite subprocess failed; "
+                    f"{first_error or 'argv mode parse failed'}; "
+                    f"stdin mode failed (code={completed_fallback.returncode}): "
+                    f"{completed_fallback.stderr.strip()}"
+                )
+            rewritten_sql = self._parse_rewrite_stdout(completed_fallback.stdout)
+
         self._rewrite_cache[cache_key] = (rewritten_sql, elapsed)
         return rewritten_sql, elapsed

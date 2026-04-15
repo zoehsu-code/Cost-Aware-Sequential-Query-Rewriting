@@ -168,6 +168,11 @@ python -m scripts.run_stage2_llm_sequence \
 
 You can also put the jar anywhere else and provide an absolute/relative path via `--rewrite-jar-path`.
 
+Rewrite invocation compatibility note:
+- Stage 2 sends rewrite payload as JSON array `[db_id, sql, rule]`.
+- It first tries **argv mode** (`java ... <main> '<json_payload>'`).
+- If that does not produce a valid SQL output, it automatically falls back to **stdin mode** (`java ... <main>` with JSON written to stdin), which matches older wrapper scripts.
+
 Quick check to confirm the command is running on TPC-H:
 
 ```bash
@@ -197,6 +202,7 @@ In the help output, you should see `--benchmark {tpch,tpchj}` with default `tpch
   - `improvement_sec = original_trimmed_mean_sec - rewritten_trimmed_mean_sec`
   - `speedup_ratio = original_trimmed_mean_sec / rewritten_trimmed_mean_sec` (when denominator > 0)
 - Stage 2 CSV includes `step_rewards` (JSON array) to explicitly record the reward for each accepted step (populated for `greedy`; empty for `llm_sequence`).
+- Stage 2 also prints `final_rule_sequence` and `step_rewards` to stdout for each query during runtime.
 
 ### How `is equivalent` is decided
 
@@ -218,3 +224,125 @@ So this is effectively a **bag-equality check with strict column-count matching*
 - Row order does **not** matter.
 - Duplicate rows still matter (multiset semantics).
 - If either SQL execution fails, the method returns `False` (no pipeline interruption).
+
+### How the Stage 2 rewrite process works now
+
+For each input row from Stage 1 CSV, Stage 2 runs this flow:
+
+1. Load `original_sql` and candidate rules from Stage 1 output.
+2. Choose a policy:
+   - `llm_sequence`: apply rules in recommended order (up to `MAX_STEPS`).
+   - `greedy`: at each step, try remaining rules, estimate reward by latency delta, and accept the best positive reward.
+3. For each selected rule, call Java rewrite engine (`rewrite.jar`) once via `CalciteRewriter.apply_rule(...)` to produce the next SQL.
+4. After policy finishes, run final equivalence check **once** on:
+   - `original_sql`
+   - final `rewritten_sql`
+5. If equivalent, evaluate latency metrics (`original_trimmed_mean_sec`, `rewritten_trimmed_mean_sec`, `speedup_ratio`, `improvement_sec`).
+6. Write one output row to Stage 2 CSV (including `final_rule_sequence`, `step_rewards`, and `equivalence_result`), and print per-query progress to stdout.
+
+## 5) Single-rule rewriter CLI (`build/single_rule_rewriter.jar`)
+
+This repository now includes a standalone **single-rule** Calcite rewriter:
+
+- input (stdin JSON array): `[db_id, sql, rule_name]`
+- output (stdout): `rewritten_sql` (plain SQL text, not JSON)
+
+### Quick start (copy/paste)
+
+1) Build jar:
+
+```bash
+rm -rf build/classes build/fat build/single_rule_rewriter.jar build/manifest.mf
+mkdir -p build/classes
+javac -cp 'rule_library/calcite_core_main_jar/*' -d build/classes $(rg --files src rule_library/java | rg '\.java$')
+mkdir -p build/fat
+cp -r build/classes/* build/fat/
+for j in rule_library/calcite_core_main_jar/*.jar; do (cd build/fat && jar xf ../../$j); done
+rm -f build/fat/META-INF/*.SF build/fat/META-INF/*.DSA build/fat/META-INF/*.RSA
+printf 'Main-Class: ruleexec.SingleRuleRewriterMain\n' > build/manifest.mf
+jar cfm build/single_rule_rewriter.jar build/manifest.mf -C build/fat .
+```
+
+2) Check registry coverage:
+
+```bash
+java -cp build/single_rule_rewriter.jar rulecheck.RuleRegistryCoverageCheck rule_library/standard.txt
+```
+
+3) Run one rule:
+
+```bash
+echo '["tpch","select * from lineitem limit 1","PROJECT_TO_CALC"]' | \
+  java -jar build/single_rule_rewriter.jar
+```
+
+4) Python call style:
+
+```python
+import json, subprocess
+
+payload = json.dumps(["tpch", "select * from lineitem limit 1", "PROJECT_TO_CALC"])
+p = subprocess.Popen(
+    ["java", "-jar", "build/single_rule_rewriter.jar"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+)
+out, err = p.communicate(payload)
+print("returncode:", p.returncode)
+print("rewritten_sql:", out.strip())
+```
+
+### Why not use current server `/rewrite`
+
+The existing server endpoint is tied to automatic search/optimization flow and is not a strict
+`apply_rule(sql, rule_name)` primitive. For policy learning (greedy/bandit/RL/llm_sequence), we need
+a deterministic single-rule executor.
+
+### Behavior summary
+
+1. Load schema only from `schemas/<db_id>.json` (`SchemaLoader`).
+2. Parse SQL to `RelNode`.
+3. Resolve exactly one rule from `RuleRegistry`.
+4. Apply exactly one HepPlanner program with that rule.
+5. Compare `RelOptUtil.toString(before)` vs `RelOptUtil.toString(after)`:
+   - same plan -> no-op, return original SQL
+   - different plan -> convert `after` back to SQL and return it
+6. On errors, print to stderr and exit non-zero.
+
+### Coverage guarantees for `rule_library/standard.txt`
+
+- `RuleRegistry` has explicit mappings for all rules listed in `rule_library/standard.txt`.
+- `RuleRegistryCoverageCheck` validates this strictly and exits code `2` if anything is missing.
+
+### Build
+
+In this environment, Maven plugin download from central may be restricted. A local-jar build is provided:
+
+```bash
+rm -rf build/classes build/fat build/single_rule_rewriter.jar build/manifest.mf
+mkdir -p build/classes
+javac -cp 'rule_library/calcite_core_main_jar/*' -d build/classes $(rg --files src rule_library/java | rg '\.java$')
+mkdir -p build/fat
+cp -r build/classes/* build/fat/
+for j in rule_library/calcite_core_main_jar/*.jar; do (cd build/fat && jar xf ../../$j); done
+rm -f build/fat/META-INF/*.SF build/fat/META-INF/*.DSA build/fat/META-INF/*.RSA
+printf 'Main-Class: ruleexec.SingleRuleRewriterMain\n' > build/manifest.mf
+jar cfm build/single_rule_rewriter.jar build/manifest.mf -C build/fat .
+```
+
+### Quick tests
+
+Coverage check:
+
+```bash
+java -cp build/single_rule_rewriter.jar rulecheck.RuleRegistryCoverageCheck rule_library/standard.txt
+```
+
+Single-rule rewrite:
+
+```bash
+echo '["tpch","select * from lineitem limit 1","PROJECT_TO_CALC"]' | \
+  java -jar build/single_rule_rewriter.jar
+```
