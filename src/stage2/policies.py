@@ -68,11 +68,12 @@ def greedy_policy(
     step_rewards: list[float] = []
     total_rewrite_latency = 0.0
 
-    for _ in range(max_steps):
+    for step_index in range(max_steps):
         best_rule: str | None = None
         best_sql: str | None = None
         best_reward = float("-inf")
         best_rewrite_latency = 0.0
+        candidate_rewards: dict[str, float] = {}
 
         for rule in list(remaining_rules):
             try:
@@ -82,11 +83,18 @@ def greedy_policy(
 
             candidate_latency = latency_of_sql(rewritten_sql)
             reward = current_latency - candidate_latency
+            candidate_rewards[rule] = reward
             if reward > best_reward:
                 best_reward = reward
                 best_rule = rule
                 best_sql = rewritten_sql
                 best_rewrite_latency = rewrite_latency
+
+        if candidate_rewards:
+            print(
+                f"[Greedy] query_id={row.query_id} step={step_index + 1} "
+                f"candidate_rewards={candidate_rewards} best_rule={best_rule} best_reward={best_reward}"
+            )
 
         if best_rule is None:
             break
