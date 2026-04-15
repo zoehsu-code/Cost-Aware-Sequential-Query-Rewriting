@@ -196,8 +196,9 @@ In the help output, you should see `--benchmark {tpch,tpchj}` with default `tpch
   - `reward < 0`: candidate SQL is slower
 
 - **`greedy` accepts only the rule with the highest reward at each step**, and stops early when `best_reward <= 0`.
-- During greedy execution, Stage 2 prints per-step `candidate_rewards`, `best_rule`, and `best_reward`
-  to stdout so you can directly inspect the computed reward values for each remaining rule.
+- During greedy execution, Stage 2 prints each tested rule's reward
+  (`query_id`, `step`, `rule`, `current_latency`, `candidate_latency`, `reward`) and
+  a per-step summary (`candidate_rewards`, `best_rule`, `best_reward`) to stdout.
 
 - **`llm_sequence` does not use reward for step-by-step decision making**; it applies the chosen sequence directly.
 

@@ -85,11 +85,20 @@ def greedy_policy(
             try:
                 rewritten_sql, rewrite_latency = apply_rule(current_sql, rule)
             except Exception:
+                print(
+                    f"[GreedyCandidate] query_id={row.query_id} step={step_index + 1} "
+                    f"rule={rule} status=apply_failed"
+                )
                 continue
 
             candidate_latency = latency_of_sql(rewritten_sql)
             reward = current_latency - candidate_latency
             candidate_rewards[rule] = reward
+            print(
+                f"[GreedyCandidate] query_id={row.query_id} step={step_index + 1} "
+                f"rule={rule} current_latency={current_latency} "
+                f"candidate_latency={candidate_latency} reward={reward}"
+            )
             if reward > best_reward:
                 best_reward = reward
                 best_rule = rule
@@ -98,7 +107,7 @@ def greedy_policy(
 
         if candidate_rewards:
             print(
-                f"[Greedy] query_id={row.query_id} step={step_index + 1} "
+                f"[GreedyStep] query_id={row.query_id} step={step_index + 1} "
                 f"candidate_rewards={candidate_rewards} best_rule={best_rule} best_reward={best_reward}"
             )
 
