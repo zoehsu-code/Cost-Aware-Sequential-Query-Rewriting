@@ -59,7 +59,13 @@ def greedy_policy(
     apply_rule: Callable[[str, str], tuple[str, float]],
     latency_of_sql: Callable[[str], float],
 ) -> PolicyResult:
-    """Greedy policy with real reward = current_latency - candidate_latency."""
+    """Greedy policy with optional per-step reward overrides.
+
+    Default reward is real latency delta:
+        reward = current_latency - candidate_latency
+    If row.greedy_step_reward_overrides is provided, current step can override
+    reward by rule name, e.g. [{"R1": 1.2, "R2": -0.1}, {"R2": 0.6}].
+    """
 
     current_sql = row.original_sql
     current_latency = latency_of_sql(current_sql)
@@ -68,7 +74,7 @@ def greedy_policy(
     step_rewards: list[float] = []
     total_rewrite_latency = 0.0
 
-    for _ in range(max_steps):
+    for step_index in range(max_steps):
         best_rule: str | None = None
         best_sql: str | None = None
         best_reward = float("-inf")
@@ -80,8 +86,17 @@ def greedy_policy(
             except Exception:
                 continue
 
-            candidate_latency = latency_of_sql(rewritten_sql)
-            reward = current_latency - candidate_latency
+            reward_overrides = row.greedy_step_reward_overrides
+            step_override = (
+                reward_overrides[step_index]
+                if reward_overrides is not None and step_index < len(reward_overrides)
+                else None
+            )
+            if step_override is not None and rule in step_override:
+                reward = float(step_override[rule])
+            else:
+                candidate_latency = latency_of_sql(rewritten_sql)
+                reward = current_latency - candidate_latency
             if reward > best_reward:
                 best_reward = reward
                 best_rule = rule

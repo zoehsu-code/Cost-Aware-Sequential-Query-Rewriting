@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tpchj-init-sql", default=None)
     parser.add_argument("--rewrite-jar-path", default=None)
     parser.add_argument("--rewrite-main-class", default=None)
-    parser.add_argument("--rewrite-timeout-sec", type=int, default=120)
+    parser.add_argument("--rewrite-timeout-sec", type=int, default=300)
     parser.add_argument("--eval-runs", type=int, default=5)
     parser.add_argument("--eval-warmup-runs", type=int, default=1)
     return parser

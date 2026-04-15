@@ -30,6 +30,36 @@ def _parse_optional_float(raw: str | None) -> float | None:
     return float(text)
 
 
+def _parse_optional_step_reward_overrides(raw: str | None) -> list[dict[str, float]] | None:
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise ValueError("greedy_step_reward_overrides must be a JSON array")
+    parsed: list[dict[str, float]] = []
+    for index, step_item in enumerate(data):
+        if not isinstance(step_item, dict):
+            raise ValueError(
+                f"greedy_step_reward_overrides[{index}] must be a JSON object of rule->reward"
+            )
+        step_map: dict[str, float] = {}
+        for key, value in step_item.items():
+            if not isinstance(key, str):
+                raise ValueError(
+                    f"greedy_step_reward_overrides[{index}] keys must be strings (rule names)"
+                )
+            if not isinstance(value, (int, float)):
+                raise ValueError(
+                    f"greedy_step_reward_overrides[{index}][{key}] must be a number"
+                )
+            step_map[key] = float(value)
+        parsed.append(step_map)
+    return parsed
+
+
 def read_stage1_csv(path: Path) -> list[Stage2InputRow]:
     """Read Stage 1 CSV outputs as Stage 2 inputs."""
 
@@ -51,6 +81,9 @@ def read_stage1_csv(path: Path) -> list[Stage2InputRow]:
                 candidate_rules=candidate_rules,
                 llm_recommended_order=llm_recommended_order,
                 llm_latency_ms=_parse_optional_float(row.get("llm_latency_ms")),
+                greedy_step_reward_overrides=_parse_optional_step_reward_overrides(
+                    row.get("greedy_step_reward_overrides")
+                ),
             )
         )
     return parsed

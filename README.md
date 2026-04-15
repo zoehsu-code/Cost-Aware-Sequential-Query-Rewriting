@@ -154,6 +154,7 @@ Notes:
 - Stage 2 defaults to `tpch`: if `--benchmark` is omitted, `tpch` is used.
 - `max_steps` is fixed to `3` in Stage 2.
 - Greedy uses early stopping: stop if `best_reward <= 0`.
+- `run_stage2_llm_sequence` uses a larger rewrite timeout by default: `--rewrite-timeout-sec 300`.
 - Rewrite payload format sent to Java process is JSON array: `[db_id, sql, rule]` (`db_id` is optional in CLI; default is benchmark name).
 - If you have your own rewrite engine jar (for example `rewriter_java.jar`), place it under
   `rule_library/calcite_core_main_jar/` and pass it explicitly to avoid auto-discovery ambiguity:
@@ -195,6 +196,10 @@ In the help output, you should see `--benchmark {tpch,tpchj}` with default `tpch
   - `reward < 0`: candidate SQL is slower
 
 - **`greedy` accepts only the rule with the highest reward at each step**, and stops early when `best_reward <= 0`.
+- You can explicitly feed per-step rewards via optional Stage 1 CSV field `greedy_step_reward_overrides`
+  (JSON array of objects), e.g. `[{"R1": 1.2, "R2": -0.1}, {"R2": 0.6}]`.
+  At each greedy step, if current rule has an override value, that override is used as reward;
+  otherwise it falls back to latency-delta reward.
 
 - **`llm_sequence` does not use reward for step-by-step decision making**; it applies the chosen sequence directly.
 
