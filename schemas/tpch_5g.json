@@ -1,7 +1,7 @@
 [
   {
     "table":"customer",
-    "rows":1500000,
+    "rows":150000,
     "columns":[
       {
         "name":"c_custkey",
@@ -39,7 +39,7 @@
   },
   {
     "table":"lineitem",
-    "rows":60000000,
+    "rows":6000000,
     "columns":[
       {
         "name":"l_orderkey",
@@ -131,7 +131,7 @@
   },
   {
     "table":"orders",
-    "rows":60000000,
+    "rows":6000000,
     "columns":[
       {
         "name":"o_orderkey",
@@ -173,7 +173,7 @@
   },
   {
     "table":"part",
-    "rows":2000000,
+    "rows":200000,
     "columns":[
       {
         "name":"p_partkey",
@@ -215,7 +215,7 @@
   },
   {
     "table":"partsupp",
-    "rows":8000000,
+    "rows":800000,
     "columns":[
       {
         "name":"ps_partkey",
@@ -259,7 +259,7 @@
   },
   {
     "table":"supplier",
-    "rows":100000,
+    "rows":10000,
     "columns":[
       {
         "name":"s_suppkey",
