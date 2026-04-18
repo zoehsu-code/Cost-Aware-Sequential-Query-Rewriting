@@ -154,6 +154,7 @@ Notes:
 - Stage 2 defaults to `tpch`: if `--benchmark` is omitted, `tpch` is used.
 - `max_steps` is fixed to `3` in Stage 2.
 - Greedy uses early stopping: stop if `best_reward <= 0`.
+- `run_stage2_llm_sequence` uses a larger rewrite timeout by default: `--rewrite-timeout-sec 300`.
 - Rewrite payload format sent to Java process is JSON array: `[db_id, sql, rule]` (`db_id` is optional in CLI; default is benchmark name).
 - If you have your own rewrite engine jar (for example `rewriter_java.jar`), place it under
   `rule_library/calcite_core_main_jar/` and pass it explicitly to avoid auto-discovery ambiguity:
