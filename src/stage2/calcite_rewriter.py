@@ -26,21 +26,50 @@ class CalciteRewriter:
         self._rewrite_cache: dict[tuple[str, str], tuple[str, float]] = {}
 
     @staticmethod
+    def _main_class_exists_in_jar(jar_path: Path, main_class: str) -> bool:
+        class_entry = f"{main_class.replace('.', '/')}.class"
+        try:
+            with zipfile.ZipFile(jar_path) as archive:
+                return class_entry in archive.namelist()
+        except Exception:
+            return False
+
+    @classmethod
+    def _has_runnable_main(cls, jar_path: Path) -> bool:
+        main_class = cls._discover_main_class(jar_path)
+        if not main_class:
+            return False
+        return cls._main_class_exists_in_jar(jar_path, main_class)
+
+    @staticmethod
     def _discover_rewrite_jar() -> Path:
         candidates = sorted(Path(".").glob("**/*.jar"))
         if not candidates:
             raise FileNotFoundError("No jar files found in repository")
 
-        priority_names = ["rewrite.jar", "rewriter_java.jar", "equitas.jar", "calcite.core.main.jar"]
+        priority_names = ["rewrite.jar", "rewriter_java.jar", "calcite.core.main.jar", "equitas.jar"]
         by_name = {path.name.lower(): path for path in candidates}
         for name in priority_names:
             match = by_name.get(name)
-            if match:
+            if match and CalciteRewriter._has_runnable_main(match):
                 return match
 
-        # Fall back to any jar with rewrite-like naming first, then first jar.
-        rewrite_like = [p for p in candidates if "rewrite" in p.name.lower() or "rewriter" in p.name.lower()]
-        return rewrite_like[0] if rewrite_like else candidates[0]
+        # Fall back to runnable jars with rewrite-like naming first, then any runnable jar.
+        rewrite_like = [
+            p
+            for p in candidates
+            if ("rewrite" in p.name.lower() or "rewriter" in p.name.lower())
+            and CalciteRewriter._has_runnable_main(p)
+        ]
+        if rewrite_like:
+            return rewrite_like[0]
+
+        runnable = [p for p in candidates if CalciteRewriter._has_runnable_main(p)]
+        if runnable:
+            return runnable[0]
+
+        # Final fallback keeps previous behavior so explicit user overrides still work.
+        return candidates[0]
 
     @staticmethod
     def _discover_main_class(jar_path: Path) -> str | None:
@@ -52,15 +81,18 @@ class CalciteRewriter:
 
         for line in manifest.splitlines():
             if line.lower().startswith("main-class:"):
-                return line.split(":", 1)[1].strip()
+                main_class = line.split(":", 1)[1].strip()
+                if CalciteRewriter._main_class_exists_in_jar(jar_path, main_class):
+                    return main_class
+                return None
         return None
 
-    def _build_java_cmd(self, payload: str) -> list[str]:
+    def _build_java_cmd(self) -> list[str]:
         if self.java_main_class:
             jar_dir = self.jar_path.parent
             classpath = os.pathsep.join(str(p) for p in sorted(jar_dir.glob("*.jar")))
-            return ["java", "-cp", classpath, self.java_main_class, payload]
-        return ["java", "-jar", str(self.jar_path), payload]
+            return ["java", "-cp", classpath, self.java_main_class]
+        return ["java", "-jar", str(self.jar_path)]
 
     @staticmethod
     def _parse_rewrite_stdout(stdout_text: str) -> str:
@@ -89,11 +121,12 @@ class CalciteRewriter:
             return self._rewrite_cache[cache_key]
 
         payload = json.dumps([db_id, sql, rule], ensure_ascii=False)
-        cmd = self._build_java_cmd(payload)
+        cmd_base = self._build_java_cmd()
 
+        # Prefer argv payload style first; fallback to stdin payload for jars that expect stdin JSON.
         start = time.perf_counter()
         completed = subprocess.run(
-            cmd,
+            [*cmd_base, payload],
             check=False,
             capture_output=True,
             text=True,
@@ -101,11 +134,37 @@ class CalciteRewriter:
         )
         elapsed = time.perf_counter() - start
 
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"Rewrite subprocess failed (code={completed.returncode}): {completed.stderr.strip()}"
+        rewritten_sql: str | None = None
+        first_error: str | None = None
+        if completed.returncode == 0:
+            try:
+                rewritten_sql = self._parse_rewrite_stdout(completed.stdout)
+            except Exception as exc:  # noqa: PERF203
+                first_error = str(exc)
+        else:
+            first_error = (
+                f"argv mode failed (code={completed.returncode}): {completed.stderr.strip()}"
             )
 
-        rewritten_sql = self._parse_rewrite_stdout(completed.stdout)
+        if rewritten_sql is None:
+            start_fallback = time.perf_counter()
+            completed_fallback = subprocess.run(
+                cmd_base,
+                input=payload,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_sec,
+            )
+            elapsed += time.perf_counter() - start_fallback
+            if completed_fallback.returncode != 0:
+                raise RuntimeError(
+                    "Rewrite subprocess failed; "
+                    f"{first_error or 'argv mode parse failed'}; "
+                    f"stdin mode failed (code={completed_fallback.returncode}): "
+                    f"{completed_fallback.stderr.strip()}"
+                )
+            rewritten_sql = self._parse_rewrite_stdout(completed_fallback.stdout)
+
         self._rewrite_cache[cache_key] = (rewritten_sql, elapsed)
         return rewritten_sql, elapsed
