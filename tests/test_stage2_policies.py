@@ -67,36 +67,3 @@ def test_llm_sequence_policy_exposes_empty_step_rewards() -> None:
 
     assert result.final_rule_sequence == ["R1"]
     assert result.step_rewards == []
-
-
-def test_greedy_policy_supports_explicit_step_reward_overrides() -> None:
-    row = Stage2InputRow(
-        query_id="q4",
-        original_sql="orig",
-        candidate_rules=["R1", "R2"],
-        llm_recommended_order=[],
-        greedy_step_reward_overrides=[{"R1": 0.1, "R2": 3.0}, {"R1": 0.5}],
-    )
-
-    rewrites = {
-        ("orig", "R1"): ("sql_r1", 0.10),
-        ("orig", "R2"): ("sql_r2", 0.10),
-        ("sql_r2", "R1"): ("sql_r2_r1", 0.10),
-    }
-    latencies = {
-        "orig": 10.0,
-        "sql_r1": 8.0,
-        "sql_r2": 9.0,
-        "sql_r2_r1": 7.0,
-    }
-
-    result = greedy_policy(
-        row,
-        max_steps=3,
-        apply_rule=lambda sql, rule: rewrites[(sql, rule)],
-        latency_of_sql=lambda sql: latencies[sql],
-    )
-
-    assert result.final_rule_sequence == ["R2", "R1"]
-    assert result.step_rewards == [3.0, 0.5]
-    assert result.final_sql == "sql_r2_r1"

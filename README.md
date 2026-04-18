@@ -196,9 +196,6 @@ In the help output, you should see `--benchmark {tpch,tpchj}` with default `tpch
   - `reward < 0`: candidate SQL is slower
 
 - **`greedy` accepts only the rule with the highest reward at each step**, and stops early when `best_reward <= 0`.
-- During greedy execution, Stage 2 prints each tested rule's reward
-  (`query_id`, `step`, `rule`, `current_latency`, `candidate_latency`, `reward`) and
-  a per-step summary (`candidate_rewards`, `best_rule`, `best_reward`) to stdout.
 
 - **`llm_sequence` does not use reward for step-by-step decision making**; it applies the chosen sequence directly.
 
@@ -298,6 +295,14 @@ print("returncode:", p.returncode)
 print("rewritten_sql:", out.strip())
 ```
 
+> `tpch.json` should be placed at: `schemas/tpch.json` (project root `schemas/` folder).  
+> If the `schemas/` folder is missing in your checkout, create it manually:
+>
+> ```bash
+> mkdir -p schemas
+> cp /path/to/tpch.json schemas/tpch.json
+> ```
+
 ### Why not use current server `/rewrite`
 
 The existing server endpoint is tied to automatic search/optimization flow and is not a strict
@@ -350,3 +355,25 @@ Single-rule rewrite:
 echo '["tpch","select * from lineitem limit 1","PROJECT_TO_CALC"]' | \
   java -jar build/single_rule_rewriter.jar
 ```
+
+Offline greedy-backward rerank from baseline CSV:
+
+```bash
+python -m scripts.run_stage2_greedy_backward \
+  --input-csv baseline/baseline.csv \
+  --stage1-csv outputs/stage1/stage1_results.csv \
+  --output-csv baseline/baseline_reranked.csv \
+  --benchmark tpch \
+  --rewrite-jar-path build/single_rule_rewriter.jar
+```
+
+Debug plans (stderr) to verify whether the rule actually matched:
+
+```bash
+echo '["tpch","select * from (select l_orderkey from lineitem) t where l_orderkey > 1","FILTER_PROJECT_TRANSPOSE"]' | \
+  SINGLE_RULE_DEBUG=1 java -jar build/single_rule_rewriter.jar
+```
+
+If `plan_changed: true` appears in stderr, the rule fired.  
+`PROJECT_MERGE` may be a no-op for many SQLs because SQL-to-Rel normalization can already remove nested
+project patterns before HepPlanner runs.

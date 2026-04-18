@@ -85,10 +85,6 @@ def greedy_policy(
             try:
                 rewritten_sql, rewrite_latency = apply_rule(current_sql, rule)
             except Exception:
-                print(
-                    f"[GreedyCandidate] query_id={row.query_id} step={step_index + 1} "
-                    f"rule={rule} status=apply_failed"
-                )
                 continue
 
             candidate_latency = latency_of_sql(rewritten_sql)

@@ -5,6 +5,7 @@ import com.alibaba.fastjson.JSONArray;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import org.apache.calcite.DataContexts;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.hep.HepMatchOrder;
@@ -16,6 +17,7 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser.Config;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.rex.RexExecutorImpl;
 import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.Planner;
@@ -52,11 +54,13 @@ public final class SingleRuleRewriterMain {
       builder.addMatchOrder(HepMatchOrder.TOP_DOWN);
 
       HepPlanner planner = new HepPlanner(builder.build());
+      planner.setExecutor(new RexExecutorImpl(DataContexts.EMPTY));
       planner.setRoot(before);
       RelNode after = planner.findBestExp();
 
       String beforePlan = RelOptUtil.toString(before);
       String afterPlan = RelOptUtil.toString(after);
+      debugPlans(ruleName, beforePlan, afterPlan);
 
       if (beforePlan.equals(afterPlan)) {
         System.out.print(sql);
@@ -66,7 +70,12 @@ public final class SingleRuleRewriterMain {
       String rewrittenSql = RelNodeSqlConverter.toSql(after);
       System.out.print(rewrittenSql);
     } catch (Exception ex) {
-      System.err.println(ex.getMessage());
+      String message = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+      System.err.println(message);
+      String debug = System.getenv("SINGLE_RULE_DEBUG");
+      if ("1".equals(debug) || "true".equalsIgnoreCase(debug)) {
+        ex.printStackTrace(System.err);
+      }
       System.exit(1);
     }
   }
@@ -97,5 +106,19 @@ public final class SingleRuleRewriterMain {
       }
     }
     return builder.toString().trim();
+  }
+
+  private static void debugPlans(String ruleName, String beforePlan, String afterPlan) {
+    String debug = System.getenv("SINGLE_RULE_DEBUG");
+    if (!"1".equals(debug) && !"true".equalsIgnoreCase(debug)) {
+      return;
+    }
+    System.err.println("=== SINGLE RULE DEBUG ===");
+    System.err.println("rule: " + ruleName);
+    System.err.println("--- before plan ---");
+    System.err.println(beforePlan);
+    System.err.println("--- after plan ---");
+    System.err.println(afterPlan);
+    System.err.println("plan_changed: " + !beforePlan.equals(afterPlan));
   }
 }
