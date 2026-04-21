@@ -21,6 +21,32 @@ def _parse_json_list(raw: str | None, field_name: str) -> list[str]:
     return data
 
 
+def _parse_rule_list(raw: str | None, field_name: str) -> list[str]:
+    """Parse rule list from JSON array text or simple delimiter-separated text."""
+
+    if raw is None:
+        return []
+    text = raw.strip()
+    if not text:
+        return []
+
+    try:
+        data = json.loads(text)
+        if isinstance(data, list) and all(isinstance(item, str) for item in data):
+            return data
+    except json.JSONDecodeError:
+        pass
+
+    separators = [",", "|", ";"]
+    for separator in separators:
+        if separator in text:
+            parsed = [item.strip() for item in text.split(separator) if item.strip()]
+            if parsed:
+                return parsed
+
+    raise ValueError(f"{field_name} must be a JSON string array or delimiter-separated string")
+
+
 def _parse_optional_float(raw: str | None) -> float | None:
     if raw is None:
         return None
@@ -70,7 +96,10 @@ def read_stage1_csv(path: Path) -> list[Stage2InputRow]:
         original_sql = (row.get("original_sql") or "").strip()
         if not query_id or not original_sql:
             raise ValueError("Stage 1 CSV must contain non-empty query_id and original_sql")
-        candidate_rules = _parse_json_list(row.get("candidate_rules"), "candidate_rules")
+        candidate_rules_raw = row.get("candidate_rules")
+        if candidate_rules_raw is None or not candidate_rules_raw.strip():
+            candidate_rules_raw = row.get("rule_set") or row.get("ruleset")
+        candidate_rules = _parse_rule_list(candidate_rules_raw, "candidate_rules/rule_set")
         llm_recommended_order = _parse_json_list(
             row.get("llm_recommended_order"), "llm_recommended_order"
         )
