@@ -2,7 +2,7 @@
 
 This repository uses a two-stage workflow:
 - **Stage 1**: an LLM selects candidate rewrite rules for each query.
-- **Stage 2**: applies a policy (`llm_sequence` or `greedy`) and evaluates rewritten SQL.
+- **Stage 2**: runs `llm_sequence` evaluation and `greedy-backward` reranking/evaluation.
 
 ---
 
@@ -117,31 +117,27 @@ python -m scripts.run_stage2_llm_sequence \
   --benchmark tpch
 ```
 
-### Run `greedy`
+### Run `greedy-backward` (recommended for baseline comparison)
 
-From Stage 1 output (default):
-
-```bash
-python -m scripts.run_stage2_greedy \
-  --input-source stage1 \
-  --output-csv outputs/stage2/greedy.csv \
-  --benchmark tpch
-```
-
-From baseline CSV:
+`greedy-backward` reads:
+- baseline rewritten results from `--input-csv` (default: `baseline/baseline.csv`)
+- candidate/recommended rule sets from `--stage1-csv` (default: `outputs/stage1/stage1_results.csv`)
 
 ```bash
-python -m scripts.run_stage2_greedy \
-  --input-source baseline \
-  --baseline-csv baseline/stage1_results.csv \
-  --output-csv outputs/stage2/greedy.csv \
-  --benchmark tpch
+python -m scripts.run_stage2_greedy_backward \
+  --input-csv baseline/baseline.csv \
+  --stage1-csv outputs/stage1/stage1_results.csv \
+  --output-csv outputs/stage2/greedy_backward.csv \
+  --benchmark tpch \
+  --rewrite-jar-path build/single_rule_rewriter.jar
 ```
+
+If Stage 1 was generated from baseline rule sets, replace `--stage1-csv` with your baseline-compatible Stage 1 CSV path.
 
 ### Baseline comparison note
 
 LLM rule selection is stochastic. Running baseline and this project independently may produce different rule sets.
-For a fair comparison, place baseline output under `baseline/` and run Stage 2 from baseline input (`--input-source baseline` or explicit `--stage1-csv`) so both pipelines use the same rule set.
+For a fair comparison, place baseline output under `baseline/` and run Stage 2 with baseline-compatible inputs (`--input-source baseline` for `llm_sequence`, and matching `--input-csv` + `--stage1-csv` for `greedy-backward`) so both pipelines use the same rule set.
 
 ---
 
@@ -150,7 +146,7 @@ For a fair comparison, place baseline output under `baseline/` and run Stage 2 f
 Recommended output directory: `outputs/stage2`
 
 - `outputs/stage2/llm_sequence.csv`
-- `outputs/stage2/greedy.csv`
+- `outputs/stage2/greedy_backward.csv`
 
 ---
 
@@ -158,15 +154,11 @@ Recommended output directory: `outputs/stage2`
 
 ```bash
 python -m scripts.run_stage2_llm_sequence --help
-python -m scripts.run_stage2_greedy --help
+python -m scripts.run_stage2_greedy_backward --help
 ```
 
 Common options:
 - `--benchmark {tpch,tpchj}` (default: `tpch`)
 - `--rewrite-jar-path`
-- `--rewrite-main-class`
-- `--rewrite-timeout-sec`
-- `--eval-runs`
-- `--eval-warmup-runs`
-
-## For any questions, feel free to contact xvming@umich.edu 
+- `--runs`
+- `--warmup-runs`

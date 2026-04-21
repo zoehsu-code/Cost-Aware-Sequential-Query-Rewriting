@@ -162,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run offline greedy-backward rerank from baseline csv")
     parser.add_argument("--input-csv", default="baseline/baseline.csv")
     parser.add_argument("--stage1-csv", default="outputs/stage1/stage1_results.csv")
-    parser.add_argument("--output-csv", default="baseline/baseline_reranked.csv")
+    parser.add_argument("--output-csv", default="outputs/stage2/greedy_backward.csv")
     parser.add_argument("--benchmark", choices=["tpch", "tpchj"], default="tpch")
     parser.add_argument("--rewrite-jar-path", default="build/single_rule_rewriter.jar")
     parser.add_argument("--runs", type=int, default=5)
