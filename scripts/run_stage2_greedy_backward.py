@@ -158,11 +158,22 @@ def diff_pct(old, new):
     return round((old - new) / old * 100, 2)
 
 
+def to_zero_if_missing(value):
+    if value is None:
+        return 0
+    try:
+        if pd.isna(value):
+            return 0
+    except Exception:
+        pass
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run offline greedy-backward rerank from baseline csv")
-    parser.add_argument("--input-csv", default="baseline/baseline.csv")
-    parser.add_argument("--stage1-csv", default="outputs/stage1/stage1_results.csv")
-    parser.add_argument("--output-csv", default="outputs/stage2/greedy_backward.csv")
+    parser.add_argument("--input-source", choices=["baseline", "stage1"], default="baseline")
+    parser.add_argument("--input-csv", default=None, help="Input CSV path. Defaults by --input-source.")
+    parser.add_argument("--output-csv", default="baseline/baseline_reranked.csv")
     parser.add_argument("--benchmark", choices=["tpch", "tpchj"], default="tpch")
     parser.add_argument("--rewrite-jar-path", default="build/single_rule_rewriter.jar")
     parser.add_argument("--runs", type=int, default=5)
@@ -172,8 +183,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    df = pd.read_csv(args.input_csv)
-    stage1_df = pd.read_csv(args.stage1_csv)
+    if args.input_csv:
+        input_path = Path(args.input_csv)
+    elif args.input_source == "stage1":
+        input_path = Path("outputs/stage1/stage1_results.csv")
+    else:
+        input_path = Path("baseline/baseline.csv")
+
+    df = pd.read_csv(input_path)
     runner = GreedyBackwardRunner(
         benchmark=args.benchmark,
         jar_path=Path(args.rewrite_jar_path),
@@ -181,20 +198,10 @@ def main() -> None:
         warmup_runs=args.warmup_runs,
     )
 
-    def stage1_rules_for_row(baseline_row) -> list[str]:
-        if "query_id" in baseline_row and pd.notna(baseline_row["query_id"]) and "query_id" in stage1_df.columns:
-            matches = stage1_df[stage1_df["query_id"] == baseline_row["query_id"]]
-        else:
-            matches = pd.DataFrame()
-        if matches.empty and "original_sql" in stage1_df.columns:
-            matches = stage1_df[stage1_df["original_sql"] == baseline_row["original_sql"]]
-        if matches.empty:
-            return []
-
-        stage1_row = matches.iloc[0]
-        for col in ("selected_rules", "llm_recommended_order", "candidate_rules"):
-            if col in stage1_row and pd.notna(stage1_row[col]):
-                parsed = parse_rules(stage1_row[col])
+    def selected_rules_for_row(row) -> list[str]:
+        for col in ("selected_rules", "llm_recommended_order", "candidate_rules", "rule_set", "ruleset"):
+            if col in row and pd.notna(row[col]):
+                parsed = parse_rules(row[col])
                 if parsed:
                     return parsed
         return []
@@ -225,11 +232,22 @@ def main() -> None:
         print(f"Processing {idx + 1}/{len(df)}")
         original_sql = row["original_sql"]
         rewritten_sql_old = row["rewritten_sql"] if "rewritten_sql" in row else None
-        selected_rules = stage1_rules_for_row(row)
+        selected_rules = selected_rules_for_row(row)
 
-        original_lat = runner.safe_latency(original_sql)
-        rewritten_lat = runner.safe_latency(rewritten_sql_old) if pd.notna(rewritten_sql_old) else None
-        eq_old = runner.equivalent_sql(original_sql, rewritten_sql_old) if pd.notna(rewritten_sql_old) else None
+        if args.input_source == "baseline":
+            original_lat = row.get("original_trimmed_mean_sec")
+            rewritten_lat = row.get("rewritten_trimmed_mean_sec")
+            eq_old = row.get("equivalence_result")
+            if original_lat is None or pd.isna(original_lat):
+                original_lat = 0
+            if rewritten_lat is None or pd.isna(rewritten_lat):
+                rewritten_lat = 0
+            if eq_old is None or pd.isna(eq_old):
+                eq_old = 0
+        else:
+            original_lat = runner.safe_latency(original_sql)
+            rewritten_lat = runner.safe_latency(rewritten_sql_old) if pd.notna(rewritten_sql_old) else None
+            eq_old = runner.equivalent_sql(original_sql, rewritten_sql_old) if pd.notna(rewritten_sql_old) else None
 
         new_original_trimmed_mean_sec.append(original_lat)
         new_rewritten_trimmed_mean_sec.append(rewritten_lat)
@@ -238,27 +256,31 @@ def main() -> None:
         full_result, final_result = runner.backward_prune(original_sql, selected_rules)
 
         rewrite_all_rules_sql_col.append(full_result["rewritten_sql"])
-        rewrite_all_rules_trimmed_mean_sec_col.append(full_result["latency"])
-        selected_rules_rewrite_sec_col.append(full_result["rewrite_sec"])
+        rewrite_all_rules_trimmed_mean_sec_col.append(to_zero_if_missing(full_result["latency"]))
+        selected_rules_rewrite_sec_col.append(to_zero_if_missing(full_result["rewrite_sec"]))
 
         final_rules_col.append(json.dumps(final_result["rules"], ensure_ascii=False))
         final_sql_col.append(final_result["rewritten_sql"])
-        final_trimmed_mean_sec_col.append(final_result["latency"])
-        final_rules_rewrite_sec_col.append(final_result["rewrite_sec"])
+        final_trimmed_mean_sec_col.append(to_zero_if_missing(final_result["latency"]))
+        final_rules_rewrite_sec_col.append(to_zero_if_missing(final_result["rewrite_sec"]))
 
         rewrite_all_lat = full_result["latency"]
         final_lat = final_result["latency"]
         full_rw_sec = full_result["rewrite_sec"]
         final_rw_sec = final_result["rewrite_sec"]
 
-        final_improvement_sec_vs_original_col.append(diff_sec(original_lat, final_lat))
-        final_improvement_pct_vs_original_col.append(diff_pct(original_lat, final_lat))
-        final_improvement_sec_vs_rewrite_all_col.append(diff_sec(rewrite_all_lat, final_lat))
-        final_improvement_pct_vs_rewrite_all_col.append(diff_pct(rewrite_all_lat, final_lat))
-        rewrite_time_saved_sec_col.append(diff_sec(full_rw_sec, final_rw_sec))
-        rewrite_time_saved_pct_col.append(diff_pct(full_rw_sec, final_rw_sec))
-        rewritten_improvement_sec_vs_original_col.append(diff_sec(original_lat, rewritten_lat))
-        rewritten_improvement_pct_vs_original_col.append(diff_pct(original_lat, rewritten_lat))
+        final_improvement_sec_vs_original_col.append(to_zero_if_missing(diff_sec(original_lat, final_lat)))
+        final_improvement_pct_vs_original_col.append(to_zero_if_missing(diff_pct(original_lat, final_lat)))
+        final_improvement_sec_vs_rewrite_all_col.append(to_zero_if_missing(diff_sec(rewrite_all_lat, final_lat)))
+        final_improvement_pct_vs_rewrite_all_col.append(to_zero_if_missing(diff_pct(rewrite_all_lat, final_lat)))
+        rewrite_time_saved_sec_col.append(to_zero_if_missing(diff_sec(full_rw_sec, final_rw_sec)))
+        rewrite_time_saved_pct_col.append(to_zero_if_missing(diff_pct(full_rw_sec, final_rw_sec)))
+        rewritten_improvement_sec_vs_original_col.append(
+            to_zero_if_missing(diff_sec(original_lat, rewritten_lat))
+        )
+        rewritten_improvement_pct_vs_original_col.append(
+            to_zero_if_missing(diff_pct(original_lat, rewritten_lat))
+        )
 
     df["original_trimmed_mean_sec"] = new_original_trimmed_mean_sec
     df["rewritten_trimmed_mean_sec"] = new_rewritten_trimmed_mean_sec
