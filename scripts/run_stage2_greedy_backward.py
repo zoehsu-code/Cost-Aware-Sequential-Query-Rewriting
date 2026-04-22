@@ -164,8 +164,8 @@ def to_zero_if_missing(value):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run offline greedy-backward rerank from baseline csv")
-    parser.add_argument("--input-source", choices=["baseline", "stage1"], default="baseline")
-    parser.add_argument("--input-csv", default=None, help="Input CSV path. Defaults by --input-source.")
+    parser.add_argument("--stage1-csv", default=None)
+    parser.add_argument("--baseline-csv", default=None)
     parser.add_argument("--output-csv", default="baseline/baseline_reranked.csv")
     parser.add_argument("--benchmark", choices=["tpch", "tpchj"], default="tpch")
     parser.add_argument("--rewrite-jar-path", default="build/single_rule_rewriter.jar")
@@ -176,12 +176,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    if args.input_csv:
-        input_path = Path(args.input_csv)
-    elif args.input_source == "stage1":
-        input_path = Path("outputs/stage1/stage1_results.csv")
-    else:
-        input_path = Path("baseline/baseline.csv")
+    has_stage1 = bool(args.stage1_csv)
+    has_baseline = bool(args.baseline_csv)
+    if has_stage1 == has_baseline:
+        raise ValueError("Provide exactly one input source: --stage1-csv OR --baseline-csv")
+
+    input_path = Path(args.stage1_csv) if has_stage1 else Path(args.baseline_csv)
+    source = "stage1" if has_stage1 else "baseline"
 
     df = pd.read_csv(input_path)
     runner = GreedyBackwardRunner(
@@ -227,7 +228,7 @@ def main() -> None:
         rewritten_sql_old = row["rewritten_sql"] if "rewritten_sql" in row else None
         selected_rules = selected_rules_for_row(row)
 
-        if args.input_source == "baseline":
+        if source == "baseline":
             original_lat = row.get("original_trimmed_mean_sec")
             rewritten_lat = row.get("rewritten_trimmed_mean_sec")
             eq_old = row.get("equivalence_result")
@@ -300,7 +301,7 @@ def main() -> None:
     output_path = Path(args.output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
-    print(f"\n✅ Saved to {output_path}")
+    print(f"\n✅ source={source} input={input_path} saved={output_path}")
 
 
 if __name__ == "__main__":
