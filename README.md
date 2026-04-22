@@ -30,6 +30,8 @@ conda activate query-rewrite
 Run the following commands from the project root:
 
 ```bash
+rm -rf build
+
 mkdir -p build/classes
 find src rule_library/java -name "*.java" > build/java_sources.txt
 javac -cp "rule_library/calcite_core_main_jar/*" -d build/classes @build/java_sources.txt
@@ -41,10 +43,9 @@ for j in rule_library/calcite_core_main_jar/*.jar; do
   (cd build/fat && jar xf "../../$j")
 done
 
-rm -f build/fat/META-INF/*.SF build/fat/META-INF/*.DSA build/fat/META-INF/*.RSA 2>/dev/null || true
+find build/fat/META-INF -type f \( -name "*.SF" -o -name "*.DSA" -o -name "*.RSA" \) -delete
 
 printf "Main-Class: ruleexec.SingleRuleRewriterMain\n" > build/manifest.mf
-
 jar cfm build/single_rule_rewriter.jar build/manifest.mf -C build/fat .
 ```
 
