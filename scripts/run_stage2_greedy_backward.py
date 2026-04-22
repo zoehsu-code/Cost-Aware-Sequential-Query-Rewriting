@@ -53,23 +53,20 @@ class GreedyBackwardRunner:
         self.evaluator = BenchmarkEvaluator(benchmark=benchmark)
 
     def apply_one_rule(self, sql: str, rule: str) -> str | None:
-        cmd = [
-            "java",
-            "-jar",
-            str(self.jar_path),
-            "--sql",
-            sql,
-            "--rule",
-            rule,
-        ]
+        payload = json.dumps([self.benchmark, sql, rule], ensure_ascii=False)
+        cmd = ["java", "-jar", str(self.jar_path)]
         try:
             result = subprocess.run(
                 cmd,
+                input=payload,
                 capture_output=True,
                 text=True,
                 check=True,
             )
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
+            print(f"[ERROR] rewrite failed for rule={rule}")
+            if e.stderr:
+                print(e.stderr.strip())
             return None
 
         rewritten = result.stdout.strip()
@@ -94,7 +91,7 @@ class GreedyBackwardRunner:
         if sql is None:
             return None
         try:
-            return self.evaluator.measure_query_latency(
+            return self.evaluator.trimmed_mean_latency_sec(
                 sql,
                 runs=self.runs,
                 warmup_runs=self.warmup_runs,
@@ -106,7 +103,7 @@ class GreedyBackwardRunner:
         if rewritten_sql is None:
             return False
         try:
-            return self.evaluator.check_equivalence(original_sql, rewritten_sql)
+            return self.evaluator.are_equivalent_sql(original_sql, rewritten_sql)
         except Exception:
             return False
 
