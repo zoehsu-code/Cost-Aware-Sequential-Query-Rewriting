@@ -117,26 +117,42 @@ class GreedyBackwardRunner:
         if full["rewritten_sql"] is None or not full["equivalent"] or full["latency"] is None:
             return full, full
 
-        current = full
-        while True:
-            best_candidate = None
-            for idx in range(len(current["rules"])):
-                candidate_rules = current["rules"][:idx] + current["rules"][idx + 1 :]
+        best_rules = list(full["rules"])
+        q_cur = full["rewritten_sql"]
+        lat_cur = full["latency"]
+        rewrite_sec_cur = full["rewrite_sec"]
+
+        improved = True
+        # FIRST-IMPROVEMENT greedy backward pruning:
+        # remove rules in order, accept first improving removal, break, and restart.
+        while improved:
+            improved = False
+            for idx in range(len(best_rules)):
+                candidate_rules = best_rules[:idx] + best_rules[idx + 1 :]
                 result = self.evaluate_sequence(original_sql, candidate_rules)
                 if (
                     result["rewritten_sql"] is not None
                     and result["equivalent"]
                     and result["latency"] is not None
-                    and result["latency"] < current["latency"]
+                    and result["latency"] < lat_cur
                 ):
-                    if best_candidate is None or result["latency"] < best_candidate["latency"]:
-                        best_candidate = result
-            if best_candidate is None:
-                break
-            current = best_candidate
-            if not current["rules"]:
-                break
-        return full, current
+                    best_rules = candidate_rules
+                    q_cur = result["rewritten_sql"]
+                    lat_cur = result["latency"]
+                    rewrite_sec_cur = result["rewrite_sec"]
+                    improved = True
+                    break
+
+        final = {
+            "rules": best_rules,
+            "rewritten_sql": q_cur,
+            "rewrite_sec": rewrite_sec_cur,
+            "latency": lat_cur,
+            "equivalent": True,
+        }
+        return full, final
+
+        
 
 
 def diff_sec(old, new):
@@ -193,110 +209,33 @@ def main() -> None:
     )
 
     def selected_rules_for_row(row) -> list[str]:
-        for col in ("selected_rules", "llm_recommended_order", "candidate_rules", "rule_set", "ruleset"):
+        for col in ("candidate_rules", "selected_rules", "llm_recommended_order", "rule_set", "ruleset"):
             if col in row and pd.notna(row[col]):
                 parsed = parse_rules(row[col])
                 if parsed:
                     return parsed
         return []
 
-    new_original_trimmed_mean_sec = []
-    new_rewritten_trimmed_mean_sec = []
-    new_equivalence_result = []
-
-    rewrite_all_rules_sql_col = []
-    rewrite_all_rules_trimmed_mean_sec_col = []
-    selected_rules_rewrite_sec_col = []
-
-    final_rules_col = []
+    final_rule_set_col = []
     final_sql_col = []
     final_trimmed_mean_sec_col = []
-    final_rules_rewrite_sec_col = []
-
-    final_improvement_sec_vs_original_col = []
-    final_improvement_pct_vs_original_col = []
-    final_improvement_sec_vs_rewrite_all_col = []
-    final_improvement_pct_vs_rewrite_all_col = []
-    rewrite_time_saved_sec_col = []
-    rewrite_time_saved_pct_col = []
-    rewritten_improvement_sec_vs_original_col = []
-    rewritten_improvement_pct_vs_original_col = []
+    final_equivalence_col = []
 
     for idx, row in df.iterrows():
         print(f"Processing {idx + 1}/{len(df)}")
         original_sql = row["original_sql"]
-        rewritten_sql_old = row["rewritten_sql"] if "rewritten_sql" in row else None
         selected_rules = selected_rules_for_row(row)
 
-        if source == "baseline":
-            original_lat = row.get("original_trimmed_mean_sec")
-            rewritten_lat = row.get("rewritten_trimmed_mean_sec")
-            eq_old = row.get("equivalence_result")
-            if original_lat is None or pd.isna(original_lat):
-                original_lat = 0
-            if rewritten_lat is None or pd.isna(rewritten_lat):
-                rewritten_lat = 0
-            if eq_old is None or pd.isna(eq_old):
-                eq_old = 0
-        else:
-            original_lat = runner.safe_latency(original_sql)
-            rewritten_lat = runner.safe_latency(rewritten_sql_old) if pd.notna(rewritten_sql_old) else None
-            eq_old = runner.equivalent_sql(original_sql, rewritten_sql_old) if pd.notna(rewritten_sql_old) else None
-
-        new_original_trimmed_mean_sec.append(original_lat)
-        new_rewritten_trimmed_mean_sec.append(rewritten_lat)
-        new_equivalence_result.append(eq_old)
-
         full_result, final_result = runner.backward_prune(original_sql, selected_rules)
-
-        rewrite_all_rules_sql_col.append(full_result["rewritten_sql"])
-        rewrite_all_rules_trimmed_mean_sec_col.append(to_zero_if_missing(full_result["latency"]))
-        selected_rules_rewrite_sec_col.append(to_zero_if_missing(full_result["rewrite_sec"]))
-
-        final_rules_col.append(json.dumps(final_result["rules"], ensure_ascii=False))
-        final_sql_col.append(final_result["rewritten_sql"])
+        final_rule_set_col.append(json.dumps(final_result["rules"], ensure_ascii=False))
+        final_sql_col.append(final_result["rewritten_sql"] if final_result["rewritten_sql"] is not None else original_sql)
         final_trimmed_mean_sec_col.append(to_zero_if_missing(final_result["latency"]))
-        final_rules_rewrite_sec_col.append(to_zero_if_missing(final_result["rewrite_sec"]))
+        final_equivalence_col.append(bool(final_result["equivalent"]))
 
-        rewrite_all_lat = full_result["latency"]
-        final_lat = final_result["latency"]
-        full_rw_sec = full_result["rewrite_sec"]
-        final_rw_sec = final_result["rewrite_sec"]
-
-        final_improvement_sec_vs_original_col.append(to_zero_if_missing(diff_sec(original_lat, final_lat)))
-        final_improvement_pct_vs_original_col.append(to_zero_if_missing(diff_pct(original_lat, final_lat)))
-        final_improvement_sec_vs_rewrite_all_col.append(to_zero_if_missing(diff_sec(rewrite_all_lat, final_lat)))
-        final_improvement_pct_vs_rewrite_all_col.append(to_zero_if_missing(diff_pct(rewrite_all_lat, final_lat)))
-        rewrite_time_saved_sec_col.append(to_zero_if_missing(diff_sec(full_rw_sec, final_rw_sec)))
-        rewrite_time_saved_pct_col.append(to_zero_if_missing(diff_pct(full_rw_sec, final_rw_sec)))
-        rewritten_improvement_sec_vs_original_col.append(
-            to_zero_if_missing(diff_sec(original_lat, rewritten_lat))
-        )
-        rewritten_improvement_pct_vs_original_col.append(
-            to_zero_if_missing(diff_pct(original_lat, rewritten_lat))
-        )
-
-    df["original_trimmed_mean_sec"] = new_original_trimmed_mean_sec
-    df["rewritten_trimmed_mean_sec"] = new_rewritten_trimmed_mean_sec
-    df["equivalence_result"] = new_equivalence_result
-
-    df["rewrite_all_rules_sql"] = rewrite_all_rules_sql_col
-    df["rewrite_all_rules_trimmed_mean_sec"] = rewrite_all_rules_trimmed_mean_sec_col
-    df["selected_rules_rewrite_sec"] = selected_rules_rewrite_sec_col
-
-    df["final_rules"] = final_rules_col
+    df["final_rule_set"] = final_rule_set_col
     df["final_sql"] = final_sql_col
     df["final_trimmed_mean_sec"] = final_trimmed_mean_sec_col
-    df["final_rules_rewrite_sec"] = final_rules_rewrite_sec_col
-
-    df["rewritten_improvement_sec_vs_original"] = rewritten_improvement_sec_vs_original_col
-    df["rewritten_improvement_pct_vs_original"] = rewritten_improvement_pct_vs_original_col
-    df["final_improvement_sec_vs_original"] = final_improvement_sec_vs_original_col
-    df["final_improvement_pct_vs_original"] = final_improvement_pct_vs_original_col
-    df["final_improvement_sec_vs_rewrite_all"] = final_improvement_sec_vs_rewrite_all_col
-    df["final_improvement_pct_vs_rewrite_all"] = final_improvement_pct_vs_rewrite_all_col
-    df["rewrite_time_saved_sec"] = rewrite_time_saved_sec_col
-    df["rewrite_time_saved_pct"] = rewrite_time_saved_pct_col
+    df["final_equivalence_result"] = final_equivalence_col
 
     output_path = Path(args.output_csv)
     output_path.parent.mkdir(parents=True, exist_ok=True)
