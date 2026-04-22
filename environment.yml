@@ -4,7 +4,7 @@ dependencies:
   - pip
   - pytest>=8
   - requests>=2.32
+  - pandas>=2.0
   - openjdk=17
   - maven>=3.9
   - duckdb>=1.0
-
