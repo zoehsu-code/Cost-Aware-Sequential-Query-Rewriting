@@ -10,7 +10,22 @@ from src.stage2.runner import Stage2RunConfig, Stage2Runner
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Stage 2 (greedy)")
-    parser.add_argument("--stage1-csv", required=True)
+    parser.add_argument(
+        "--stage1-csv",
+        default=None,
+        help="Input CSV path. If omitted, path is resolved by --input-source.",
+    )
+    parser.add_argument(
+        "--input-source",
+        choices=["stage1", "baseline"],
+        default="stage1",
+        help="Select default input CSV source when --stage1-csv is omitted.",
+    )
+    parser.add_argument(
+        "--baseline-csv",
+        default="baseline/stage1_results.csv",
+        help="Default baseline CSV path when --input-source baseline.",
+    )
     parser.add_argument("--output-csv", required=True)
     parser.add_argument("--db-id", default=None, help="Optional; defaults to benchmark name")
     parser.add_argument("--benchmark", choices=["tpch", "tpchj"], default="tpch")
@@ -27,8 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.stage1_csv:
+        stage1_csv = Path(args.stage1_csv)
+    elif args.input_source == "baseline":
+        stage1_csv = Path(args.baseline_csv)
+    else:
+        stage1_csv = Path("outputs/stage1/stage1_results.csv")
+
     config = Stage2RunConfig(
-        stage1_csv=Path(args.stage1_csv),
+        stage1_csv=stage1_csv,
         output_csv=Path(args.output_csv),
         policy="greedy",
         db_id=args.db_id,
