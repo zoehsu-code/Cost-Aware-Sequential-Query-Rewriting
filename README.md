@@ -25,7 +25,29 @@ conda env create -f environment.yml
 conda activate query-rewrite
 ```
 
----
+### Build the Java rewriter jar
+
+Run the following commands from the project root:
+
+```bash
+mkdir -p build/classes
+find src rule_library/java -name "*.java" > build/java_sources.txt
+javac -cp "rule_library/calcite_core_main_jar/*" -d build/classes @build/java_sources.txt
+
+mkdir -p build/fat
+cp -r build/classes/* build/fat/
+
+for j in rule_library/calcite_core_main_jar/*.jar; do
+  (cd build/fat && jar xf "../../$j")
+done
+
+rm -f build/fat/META-INF/*.SF build/fat/META-INF/*.DSA build/fat/META-INF/*.RSA 2>/dev/null || true
+
+printf "Main-Class: ruleexec.SingleRuleRewriterMain\n" > build/manifest.mf
+
+jar cfm build/single_rule_rewriter.jar build/manifest.mf -C build/fat .
+```
+
 
 ## 2) Input CSV requirements (Stage 1)
 
