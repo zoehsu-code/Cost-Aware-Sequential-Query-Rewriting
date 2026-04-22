@@ -1,5 +1,7 @@
 # Sequential Rule Scheduling for Query Rewrite
 
+### contributor: Ming Xu
+
 This repository uses a two-stage workflow:
 - **Stage 1**: an LLM selects candidate rewrite rules for each query.
 - **Stage 2**: runs `llm_sequence` evaluation and `greedy-backward` reranking/evaluation.
@@ -185,5 +187,45 @@ Common options:
 - `--rewrite-jar-path`
 - `--runs`
 - `--warmup-runs`
+
+## Code Structure
+
+The codebase is organized into two main parts: (1) final system execution pipeline and (2) experimental components.
+
+### 1) Final System (Execution Pipeline)
+
+scripts/
+- run_stage1.py: entry point for Stage 1 LLM-based rule selection
+- run_stage2_greedy_backward.py: main entry point for Stage 2 optimization using greedy-backward reranking
+- run_stage2_llm_sequence.py: directly reads the input CSV, sequentially applies the selected rewrite rules, executes the rewritten SQL, and outputs latency and equivalence results
+
+rule_library/
+- standard.txt: rewrite rule definitions
+- java/: Java implementation for rule execution and rule checking
+- calcite_core_main_jar/: third-party Apache Calcite libraries used for SQL parsing and rewriting
+
+### 2) Experimental Components
+
+src/stage2/
+- evaluator.py: evaluates query latency and equivalence
+- runner.py: earlier Stage 2 pipeline abstraction used for policy-based execution
+- policies.py: implementations of different rule scheduling strategies, including:
+  - llm_sequence: applies rules in LLM-recommended order
+  - greedy: iterative rule selection based on local improvements
+  - lookahead (experimental): evaluates future rule sequences for better global decisions
+
+scripts/
+- run_stage2_llm_sequence.py (earlier version): policy-based execution using runner and policies
+- other experimental scripts for testing different scheduling strategies
+
+pools/
+- positive and negative query pools used for rule selection experiments
+
+baseline/
+- baseline query rewrites and results for comparison
+
+outputs/
+- stores intermediate and final experimental results
+
 
 ## Any questions? Feel free to contact xvming@umich.edu
