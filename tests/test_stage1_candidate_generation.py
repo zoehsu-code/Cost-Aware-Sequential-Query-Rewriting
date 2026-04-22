@@ -95,6 +95,26 @@ def test_stage1_rejects_duplicate_candidate_rules(tmp_path: Path) -> None:
         generator.run_for_query(stage_input, rules)
 
 
+def test_stage1_falls_back_to_input_original_sql_when_llm_changes_it(tmp_path: Path) -> None:
+    config = Stage1Config(max_rules=2, include_empty=False, output_dir=tmp_path)
+    stage_input = Stage1Input(query_id="q_004", original_sql="SELECT 1")
+    rules = [CalciteRule("PROJECT_TO_CALC", "Convert project to calc")]
+    llm = FakeLLM(
+        {
+            "query_id": "q_004",
+            "original_sql": "SELECT /* changed by llm */ 1",
+            "candidate_pool_size": 2,
+            "candidate_rules": ["PROJECT_TO_CALC"],
+            "llm_recommended_order": ["PROJECT_TO_CALC"],
+        }
+    )
+
+    generator = Stage1CandidateGenerator(config=config, llm_client=llm)
+    result = generator.run_for_query(stage_input, rules)
+
+    assert result["original_sql"] == "SELECT 1"
+
+
 def test_load_standard_rule_library_supports_section_headers_and_dedup(tmp_path: Path) -> None:
     standard = tmp_path / "standard.txt"
     standard.write_text(
