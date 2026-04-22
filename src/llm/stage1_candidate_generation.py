@@ -95,7 +95,7 @@ class Stage1CandidateGenerator:
             raise ValueError("query_id must be preserved exactly")
         output["query_id"] = stage_input.query_id
         if output["original_sql"] != stage_input.original_sql:
-            raise ValueError("original_sql must be preserved exactly")
+            output["original_sql"] = stage_input.original_sql
 
         candidate_pool_size = output["candidate_pool_size"]
         if candidate_pool_size != self.config.max_rules:
