@@ -228,4 +228,3 @@ outputs/
 - stores intermediate and final experimental results
 
 
-## Any questions? Feel free to contact xvming@umich.edu
