@@ -6,6 +6,14 @@ This repository uses a two-stage workflow:
 - **Stage 1**: an LLM selects candidate rewrite rules for each query.
 - **Stage 2**: runs `llm_sequence` evaluation and `greedy-backward` reranking/evaluation.
 
+## Results
+
+<p align="center">
+  <img src="./docs/comparison.png" alt="Before vs After Reranking" width="520">
+</p>
+
+Overall, our method improves query performance for 64.29% of queries, while 35.71% experience some degradation. Notably, although some LLM-generated rewrites initially perform worse than the original query, our execution-guided refinement is able to further optimize these cases and recover performance gains. In addition, our approach preserves high correctness, achieving an equivalence accuracy of 92.86%.
+
 ---
 
 ## 1) Environment setup
@@ -226,5 +234,3 @@ baseline/
 
 outputs/
 - stores intermediate and final experimental results
-
-
